@@ -78,6 +78,8 @@ defineModule(sim, list(
                               "based on identical `ecoregionGroup`, `speciesCode`, `age` and `B` composition,",
                               "even if the user supplies other initial groupings (e.g., via the `Biomass_borealDataPrep`",
                               "module.")),
+    expectsInput(objectName = "timeSinceFire", objectClass = "SpatRaster",
+                 desc = "If dynamic, map of time since last burn used in model"),
     expectsInput(objectName = "modelLand", objectClass = "list",
                   desc = "A list of rasters aligned with the model outputs to be used in UD modules"),
     expectsInput(objectName = "studyAreaCaribou", objectClass = "SpatVector",
@@ -425,6 +427,14 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
   dPath <- asPath(getOption("reproducible.destinationPath", dataPath(sim)), 1)
   message(currentModule(sim), ": using dataPath '", dPath, "'.")
 
+  # load caribou studyArea
+  if (!suppliedElsewhere("studyAreaCaribou", sim)) {
+    
+    message("using studyArea for studyAreaCaribou maps")
+    
+    sim$studyAreaCaribou <- sim$studyArea
+  }
+  
   # load modelLand
   if (!suppliedElsewhere("modelLand", sim)) {
 
