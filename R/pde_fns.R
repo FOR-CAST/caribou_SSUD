@@ -36,6 +36,21 @@ mod2UD <- function(mod, envlayers, studyArea, prefix = NULL, normalize = TRUE) {
   }
 }
 
+#' fixed-effect coefficients of an iSSA model, as a `data.table` with columns `term` and `estimate`
+#' `mod` is a glmmTMB model, or a table with those two columns (others, e.g. the `se`, `z` and `p`
+#' of hsaCEtool's `<model>_fixed.csv`, are dropped)
+coef_tab <- function(mod) {
+  if (is.data.frame(mod)) {
+    miss <- setdiff(c('term', 'estimate'), names(mod))
+    if (length(miss)) {
+      stop('the coefficients table lacks column(s): ', paste(miss, collapse = ', '), call. = FALSE)
+    }
+    return(data.table(term = as.character(mod$term), estimate = as.numeric(mod$estimate)))
+  }
+  fe <- fixef(mod)[['cond']]
+  data.table(term = names(fe), estimate = unname(fe))
+}
+
 #' prepares pde and feeds into `make_pde_map()`
 # make_pde <- function(mod, lsRasters, studyArea, saveName = NULL) {
 #   fixEff <- data.table(var = names(fixef(mod)[['cond']]), estimate = fixef(mod)[['cond']])
@@ -63,12 +78,11 @@ mod2UD <- function(mod, envlayers, studyArea, prefix = NULL, normalize = TRUE) {
 #
 #   return(pde)
 # }
+#' `mod` is a glmmTMB iSSA model, or a table of its fixed-effect coefficients (see `coef_tab()`)
 make_pde <- function(mod, lsRasters, studyArea, normalize = TRUE) {
 
-  fixEff <- data.table(
-    var = names(fixef(mod)[['cond']]),
-    estimate = fixef(mod)[['cond']]
-  )
+  fixEff <- coef_tab(mod)
+  setnames(fixEff, 'term', 'var')
 
   selectionCoefs <- fixEff[var %like% '_end']
   selectionCoefs[, expr := gsub('_end|I', '', var)]
