@@ -47,8 +47,9 @@ local_prepInputs_mock <- function(mock, env = parent.frame()) {
   )
 }
 
-run_simInit <- function(paths, objects, params = list()) {
+run_simInit <- function(paths, objects, params = list(), ...) {
   suppressMessages(SpaDES.core::simInit(
+    ...,
     times = list(start = 2025, end = 2025),
     params = list(caribou_SSUD = utils::modifyList(
       list(ecotype = "northern_mountain", .studyAreaName = "test", .useCache = FALSE), params
@@ -190,4 +191,54 @@ test_that("a static run makes only the baseline, and schedules no forecast", {
   expect_identical(setdiff(done[moduleName == "caribou_SSUD", eventType], ".inputObjects"), "init")
   expect_named(sim$pde, "global")
   expect_null(sim$simPde)
+})
+
+test_that("a static run registers the baseline files it wrote as saved outputs, even with simInit() outputs", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+
+  # simInit() replaces outputs(sim) with its `outputs` after .inputObjects(), where the baseline is made
+  sim <- suppressMessages(SpaDES.core::spades(
+    run_simInit(paths, nm_objects(), params = list(simulationProcess = "static"),
+                outputs = data.frame(objectName = "iSSAcoefficients", saveTime = 2025)),
+    debug = FALSE
+  ))
+  out <- SpaDES.core::outputs(sim)
+  base <- out[out$objectName %in% c("pde", "pdeMap"), ]
+
+  expect_setequal(basename(base$file), c("pde_global.tif", "pdeMap_global.tif"))
+  expect_identical(base$objectName[basename(base$file) == "pde_global.tif"], "pde")
+  expect_true(all(base$saved))
+  expect_true(all(file.exists(base$file)))
+  expect_identical(unique(base$package), "terra")
+  expect_identical(unique(base$fun), "writeRaster")
+})
+
+test_that("a supplied baseline registers no baseline files", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+  pde <- list(global = terra::rast(fixture_envlayers()$x, vals = 0.25))
+
+  sim <- suppressMessages(SpaDES.core::spades(
+    run_simInit(paths, c(nm_objects(), list(pde = pde)), params = list(simulationProcess = "static")),
+    debug = FALSE
+  ))
+  expect_false(any(SpaDES.core::outputs(sim)$objectName %in% c("pde", "pdeMap")))
+})
+
+test_that("registerPdeFiles() lists the files in outputs(sim) as saved, under the objects named", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+  sim <- run_simInit(paths, nm_objects())
+  files <- list(pde = c(global = file.path(paths$other, "pde_global_year2030.tif")),
+                pdeMap = c(global = file.path(paths$other, "pdeMap_global_year2030.tif")))
+
+  sim <- registerPdeFiles(sim, files, objectNames = c(pde = "simPde", pdeMap = "simPdeMap"))
+  out <- SpaDES.core::outputs(sim)
+  out <- out[out$objectName %in% c("simPde", "simPdeMap"), ]
+
+  expect_identical(out$objectName, c("simPde", "simPdeMap"))
+  expect_identical(basename(out$file), c("pde_global_year2030.tif", "pdeMap_global_year2030.tif"))
+  expect_true(all(out$saved))
+  expect_identical(unique(out$package), "terra")
 })

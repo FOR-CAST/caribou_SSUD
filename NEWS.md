@@ -8,6 +8,7 @@
 - `studyArea_juris` is downloaded only for regional models. The downloaded file may hold areas packed with `terra::wrap()` or `sf` shapes; a file of unpacked SpatVectors (as `caribouLocPrep` saved them before) cannot be read back, so the module stops and says to make the file again.
 - Fixed: the boreal PDEs were made but then lost; layer names were lost from a downloaded `modelLand`; `studyArea_juris` downloaded from Drive was not stored.
 - In dynamic mode, a `modelLand` without one of the layers the forecast keeps fixed stops with the names of the missing layers (`makeFixedSSUD()`). A premade baseline .zip is unpacked into an emptied folder, and a baseline with two files of the same name stops, so an earlier baseline's file is never read.
+- The PDE maps the module writes are registered as saved outputs (`outputs(sim)`): the baseline's as `pde` and `pdeMap` (registered in `init`, so `simInit()`'s `outputs` argument does not drop them), and each forecast year's as `simPde` and `simPdeMap`. `makePDEs()` also returns the paths it wrote, as `files`.
 
 # caribou_SSUD 0.0.1 (21 February 2025)
 

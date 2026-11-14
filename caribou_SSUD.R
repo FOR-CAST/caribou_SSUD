@@ -143,6 +143,12 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
       # that other modules make; static mode stops there
       sim <- setupBaseline(sim)
 
+      # register the baseline files this run wrote; here, not in .inputObjects(), because simInit()
+      # replaces outputs(sim) with its `outputs` argument after .inputObjects()
+      if (!is.null(mod$baselineFiles)) {
+        sim <- registerPdeFiles(sim, mod$baselineFiles)
+      }
+
       if (Par$simulationProcess == "dynamic") {
         if(Par$ecotype == 'boreal'){
           sim$timeSinceFire <- postProcess(sim$modelLand$timeSinceFire,
@@ -318,6 +324,7 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
                      savePath = outDir, key = key)
       sim$simPde[[key]] <- ud$pde
       sim$simPdeMap[[key]] <- ud$pdeMap
+      sim <- registerPdeFiles(sim, ud$files, objectNames = c(pde = "simPde", pdeMap = "simPdeMap"))
 
 
       message(paste0("Finished creating PDE for: ", thisYear))
@@ -476,6 +483,9 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "baselineYear", "pde")) 
                      studyArea_juris = sim$studyArea_juris, normalizePDE = P(sim)$normalizePDE,
                      savePath = outDir)
       message("Baseline PDEs saved to: ", outDir)
+
+      # registered as outputs in init (see there)
+      mod$baselineFiles <- ud$files
     }
 
     sim$pde <- ud$pde
