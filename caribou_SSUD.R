@@ -143,10 +143,13 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
       # that other modules make; static mode stops there
       sim <- setupBaseline(sim)
 
-      # register the baseline files this run wrote; here, not in .inputObjects(), because simInit()
-      # replaces outputs(sim) with its `outputs` argument after .inputObjects()
-      if (!is.null(mod$baselineFiles)) {
-        sim <- registerPdeFiles(sim, mod$baselineFiles)
+      # a baseline this module made is saved, and registered as outputs, here rather than where it is
+      # made: a cache hit for .inputObjects() would not write its files to this run's outputPath, and
+      # simInit() replaces outputs(sim) with its `outputs` argument after .inputObjects()
+      if (is.na(Par$baselineSource) && !suppliedElsewhere("pde", sim, where = c("user", "initEvent"))) {
+        outDir <- reproducible::checkPath(file.path(outputPath(sim), paste0('pde_', Par$.studyAreaName)), create = T)
+        sim <- registerPdeFiles(sim, writePDEs(sim$pde, sim$pdeMap, outDir))
+        message("Baseline PDEs saved to: ", outDir)
       }
 
       if (Par$simulationProcess == "dynamic") {
@@ -476,16 +479,11 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "baselineYear", "pde")) 
 
       envlayers <- list2env(setNames(lapply(names(sim$modelLand), function(n) sim$modelLand[[n]]), names(sim$modelLand)),
                             parent = baseenv())
-      outDir <- reproducible::checkPath(file.path(outputPath(sim), paste0('pde_', P(sim)$.studyAreaName)), create = T)
 
+      # saved in init (see there)
       ud <- makePDEs(mods = pdeModels(modelNames, P(sim)$ecotype, sim$iSSAmodels, sim$iSSAcoefficients),
                      envLayers = envlayers, studyAreaCaribou = sim$studyAreaCaribou,
-                     studyArea_juris = sim$studyArea_juris, normalizePDE = P(sim)$normalizePDE,
-                     savePath = outDir)
-      message("Baseline PDEs saved to: ", outDir)
-
-      # registered as outputs in init (see there)
-      mod$baselineFiles <- ud$files
+                     studyArea_juris = sim$studyArea_juris, normalizePDE = P(sim)$normalizePDE)
     }
 
     sim$pde <- ud$pde

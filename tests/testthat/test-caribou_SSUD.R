@@ -125,7 +125,7 @@ nm_objects <- function() {
        studyAreaCaribou = fixture_area())
 }
 
-test_that("simInit() makes the baseline and saves it, when not supplied", {
+test_that("simInit() makes the baseline when not supplied, and writes no files (init saves it)", {
   skip_if_not_installed("SpaDES.core")
   paths <- local_spades_sandbox()
 
@@ -134,7 +134,8 @@ test_that("simInit() makes the baseline and saves it, when not supplied", {
   expect_named(sim$pde, "global")
   expect_equal(terra::values(sim$pde$global), terra::values(made$pde$global))
   expect_equal(terra::values(sim$pdeMap$global), terra::values(made$pdeMap$global))
-  expect_setequal(list.files(file.path(paths$other, "pde_test")), c("pde_global.tif", "pdeMap_global.tif"))
+  ## a cache hit for .inputObjects() would not write them
+  expect_false(dir.exists(file.path(paths$other, "pde_test")))
 })
 
 test_that("simInit() takes a supplied baseline as it is, and makes and saves nothing", {
@@ -224,6 +225,54 @@ test_that("a supplied baseline registers no baseline files", {
     debug = FALSE
   ))
   expect_false(any(SpaDES.core::outputs(sim)$objectName %in% c("pde", "pdeMap")))
+  expect_false(dir.exists(file.path(paths$other, "pde_test")))
+})
+
+test_that("a premade baseline (baselineSource) is not saved or registered", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+  premade <- withr::local_tempdir()
+  makePDEs(list(global = fixture_coefs()), fixture_envlayers(), studyAreaCaribou = fixture_area(),
+           savePath = premade)
+  local_prepInputs_mock(function(destinationPath = NULL, ...) {
+    dir.create(destinationPath, recursive = TRUE, showWarnings = FALSE)
+    file.copy(list.files(premade, full.names = TRUE), destinationPath)
+    NULL
+  })
+
+  sim <- suppressMessages(SpaDES.core::spades(
+    run_simInit(paths, nm_objects(), params = list(simulationProcess = "static",
+                                                    baselineSource = "https://drive.google.com/file/d/aTestBaseline")),
+    debug = FALSE
+  ))
+  expect_false(any(SpaDES.core::outputs(sim)$objectName %in% c("pde", "pdeMap")))
+  expect_false(dir.exists(file.path(paths$other, "pde_test")))
+})
+
+test_that("with .inputObjects() cached, a cache hit still saves and registers the baseline in the run's outputPath", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+  withr::local_options(reproducible.useCache = TRUE)
+  params <- list(simulationProcess = "static", .useCache = ".inputObjects")
+  run <- function() {
+    suppressMessages(SpaDES.core::spades(run_simInit(paths, nm_objects(), params = params), debug = FALSE))
+  }
+  entries <- function() suppressMessages(data.table::uniqueN(reproducible::showCache(paths$other)$cacheId))
+
+  run()
+  n <- entries()
+  ## the baseline files gone, as for a run with a new outputPath that shares the cache
+  unlink(file.path(paths$other, "pde_test"), recursive = TRUE)
+  sim <- run()
+
+  ## a cache hit: .inputObjects() did not run again
+  expect_gt(n, 0)
+  expect_identical(entries(), n)
+  out <- SpaDES.core::outputs(sim)
+  base <- out[out$objectName %in% c("pde", "pdeMap"), ]
+  expect_setequal(base$file, file.path(SpaDES.core::outputPath(sim), "pde_test",
+                                       c("pde_global.tif", "pdeMap_global.tif")))
+  expect_true(all(file.exists(base$file)))
 })
 
 test_that("registerPdeFiles() lists the files in outputs(sim) as saved, under the objects named", {

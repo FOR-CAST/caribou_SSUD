@@ -43,23 +43,7 @@ makePDEs <- function(mods, envLayers, studyAreaCaribou = NULL, studyArea_juris =
 
   # save outputs, and return the paths written
   if (!is.null(savePath)) {
-    files <- list(pde = character(), pdeMap = character())
-
-    for (mn in names(UDlist)) {
-      suffix <- paste(c(mn, key), collapse = "_")
-      files$pde[[mn]] <- file.path(savePath, paste0('pde_', suffix, ".tif"))
-      terra::writeRaster(pde[[mn]], files$pde[[mn]], filetype = "GTiff", overwrite = TRUE)
-
-      if (!is.null(pdeMap)) {
-        files$pdeMap[[mn]] <- file.path(savePath, paste0('pdeMap_', suffix, ".tif"))
-        terra::writeRaster(pdeMap[[mn]], files$pdeMap[[mn]], filetype = "GTiff", overwrite = TRUE)
-      }
-    }
-
-    if (is.null(pdeMap)) {
-      files$pdeMap <- NULL
-    }
-    out$files <- files
+    out$files <- writePDEs(pde, pdeMap, savePath, key)
   }
 
   return(out)
