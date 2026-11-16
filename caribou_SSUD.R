@@ -168,6 +168,15 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
       # that other modules make; static mode stops there
       sim <- setupBaseline(sim)
 
+      # a baseline this module made is saved, and registered as outputs, here rather than where it is
+      # made: a cache hit for .inputObjects() would not write its files to this run's outputPath, and
+      # simInit() replaces outputs(sim) with its `outputs` argument after .inputObjects()
+      if (is.na(P(sim)$baselineSource) && !suppliedElsewhere("pde", sim, where = c("user", "initEvent"))) {
+        outDir <- reproducible::checkPath(file.path(outputPath(sim), paste0('pde_', P(sim)$.studyAreaName)), create = T)
+        sim <- registerPdeFiles(sim, writePDEs(sim$pde, sim$pdeMap, outDir))
+        message("Baseline PDEs saved to: ", outDir)
+      }
+
       if (P(sim)$simulationProcess == "dynamic") {
         # the forecast grid; stops if modelLand is not on it
         grid <- ssudGrid(sim$modelLand, sim$rasterToMatch)
@@ -347,6 +356,7 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
                      pdeArea = P(sim)$pdeArea)
       sim$simPde[[key]] <- ud$pde
       sim$simPdeMap[[key]] <- ud$pdeMap
+      sim <- registerPdeFiles(sim, ud$files, objectNames = c(pde = "simPde", pdeMap = "simPdeMap"))
 
 
       message(paste0("Finished creating PDE for: ", thisYear))
@@ -500,18 +510,16 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "baselineYear", "pde")) 
 
       envlayers <- list2env(setNames(lapply(names(sim$modelLand), function(n) sim$modelLand[[n]]), names(sim$modelLand)),
                             parent = baseenv())
-      outDir <- reproducible::checkPath(file.path(outputPath(sim), paste0('pde_', P(sim)$.studyAreaName)), create = T)
 
       mods <- pdeModels(modelNames, P(sim)$ecotype, sim$iSSAmodels, sim$iSSAcoefficients)
       # stops naming any layer the models read that modelLand lacks; warns if one may need `_adj`
       checkModelLayers(mods, names(sim$modelLand), warnCapped = TRUE)
 
+      # saved in init (see there)
       ud <- makePDEs(mods = mods,
                      envLayers = envlayers, studyAreaCaribou = sim$studyAreaCaribou,
                      studyArea_juris = sim$studyArea_juris, normalizePDE = P(sim)$normalizePDE,
-                     savePath = outDir, studyAreaReporting = sim$studyAreaReporting,
-                     pdeArea = P(sim)$pdeArea)
-      message("Baseline PDEs saved to: ", outDir)
+                     studyAreaReporting = sim$studyAreaReporting, pdeArea = P(sim)$pdeArea)
     }
 
     sim$pde <- ud$pde

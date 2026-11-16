@@ -12,6 +12,7 @@
 - New parameter `pdeArea` picks the area each PDE is predicted, normalized and binned over, one choice per model scale: for the global model `"fullArea"` (default, as before: `studyAreaCaribou`) or `"fullReportingArea"` (the new input `studyAreaReporting`); for regional models `"regionalArea"` (default, as before: the region in `studyArea_juris`) or `"regionalReportingArea"` (the part of `studyAreaReporting` inside the region).
 - The forecast grid is the simulation's `rasterToMatch`, now a declared input (without it, `modelLand`'s grid); `rasterToMatch_SSUD` is gone. In dynamic mode, a `modelLand` layer not on that grid stops the run with its name.
 - `ts_else` (years since disturbance for cells never disturbed) now defaults to 200, the value the northern mountain models were fit with.
+- The PDE maps the module writes are registered as saved outputs (`outputs(sim)`): the baseline's as `pde` and `pdeMap`, and each forecast year's as `simPde` and `simPdeMap`. A baseline the module makes is saved in `init`, not in `.inputObjects()`, so it is saved to the run's `outputPath` and registered with caching on or off (a cache hit for `.inputObjects()` does not run it), and `simInit()`'s `outputs` argument does not drop it. `makePDEs()` also returns the paths it wrote, as `files`; `writePDEs()` writes PDEs already made.
 
 # caribou_SSUD 0.0.1 (21 February 2025)
 
