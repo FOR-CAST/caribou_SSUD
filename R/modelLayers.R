@@ -39,3 +39,24 @@ checkModelLayers <- function(mods, layerNames, warnCapped = FALSE) {
 
   invisible(TRUE)
 }
+
+# the grid the module builds forecast layers on: the simulation's rasterToMatch if given, else
+# modelLand's own grid. Stops if a modelLand layer is not on that grid (same extent, rows and
+# columns, cell size and coordinate system)
+ssudGrid <- function(modelLand, rasterToMatch = NULL) {
+
+  grid <- if (is.null(rasterToMatch)) terra::rast(modelLand[[1]]) else terra::rast(rasterToMatch)
+
+  offGrid <- names(modelLand)[!vapply(modelLand, function(r) {
+    isTRUE(terra::compareGeom(r, grid, stopOnError = FALSE, messages = FALSE))
+  }, logical(1))]
+
+  if (length(offGrid)) {
+    stop("These modelLand layers are not on ",
+         if (is.null(rasterToMatch)) "the grid of the first modelLand layer" else "rasterToMatch's grid",
+         " (extent, rows and columns, cell size or coordinate system differ): ",
+         paste(offGrid, collapse = ", "), call. = FALSE)
+  }
+
+  grid
+}

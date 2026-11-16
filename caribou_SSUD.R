@@ -108,8 +108,11 @@ defineModule(sim, list(
                                "supplied, `modelLand.tif` is downloaded from outputFolderID.")),
     expectsInput(objectName = "studyAreaCaribou", objectClass = "SpatVector",
                  desc = "a single polygon derived from the full extent of caribou locations used for the global model"),
-    expectsInput(objectName = "rasterToMatch_SSUD", objectClass = "spatRaster",
-                 desc = "Raster to match for SSUD"),
+    expectsInput(objectName = "rasterToMatch", objectClass = "SpatRaster",
+                 desc = paste("Dynamic mode: the simulation's grid, e.g. the one LandR and scfm use. The",
+                              "forecast layers are built on it, and every modelLand layer must be on it",
+                              "(same extent, rows and columns, cell size and coordinate system), or the",
+                              "run stops. If not supplied, modelLand's grid is used.")),
     expectsInput(objectName = "studyArea_juris", objectClass = "list",
                  desc = paste("Named list of SpatVectors, one area per region (e.g. jurisdiction), for the",
                               "regional models. Not needed when simulationScale is 'global'.")),
@@ -151,14 +154,17 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
       sim <- setupBaseline(sim)
 
       if (P(sim)$simulationProcess == "dynamic") {
+        # the forecast grid; stops if modelLand is not on it
+        grid <- ssudGrid(sim$modelLand, sim$rasterToMatch)
+
         if(P(sim)$ecotype == 'boreal'){
           sim$timeSinceFire <- postProcess(sim$modelLand$timeSinceFire,
-                                           to = sim$rasterToMatch)
+                                           to = grid)
         }
 
         if(P(sim)$ecotype == 'northern_mountain'){
           sim$timeSinceFire <- postProcess(sim$modelLand$timeSinceFire,
-                                           to = sim$rasterToMatch)
+                                           to = grid)
         }
 
 
@@ -181,7 +187,7 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
       key <- paste0("year", thisYear)
       message(paste0("Simulating landscape for ", thisYear))
 
-      template <- sim$rasterToMatch_SSUD # TODO this is a quick fix, need to do an if exists inputObject
+      template <- ssudGrid(sim$modelLand, sim$rasterToMatch)
 
 
 

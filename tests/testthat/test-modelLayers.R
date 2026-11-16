@@ -41,3 +41,22 @@ test_that("checkModelLayers() warns when a model reads an uncapped distance whos
   expect_no_warning(checkModelLayers(plain, layers))
   expect_no_warning(checkModelLayers(capped, layers, warnCapped = TRUE))
 })
+
+test_that("ssudGrid() gives rasterToMatch, or modelLand's grid without it", {
+  land <- as.list(fixture_envlayers())[c("x", "y")]
+  rtm <- terra::rast(land$x)
+
+  expect_true(terra::compareGeom(ssudGrid(land), land$x))
+  expect_true(terra::compareGeom(ssudGrid(land, rtm), rtm))
+  expect_false(terra::hasValues(ssudGrid(land)))
+})
+
+test_that("ssudGrid() stops naming the modelLand layers not on rasterToMatch's grid", {
+  land <- as.list(fixture_envlayers())[c("x", "y")]
+  finer <- terra::rast(nrows = 4, ncols = 4, xmin = 0, xmax = 2, ymin = 0, ymax = 2,
+                       crs = terra::crs(land$x))
+
+  expect_error(ssudGrid(land, finer), "rasterToMatch's grid.*x, y")
+  land$y <- terra::disagg(land$y, 2)
+  expect_error(ssudGrid(land), "first modelLand layer.*: y$")
+})
