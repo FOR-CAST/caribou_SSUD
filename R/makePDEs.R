@@ -6,7 +6,8 @@
 #' named as `mods`. The global model covers `studyAreaCaribou`, and each regional model its area in
 #' `studyArea_juris`. If `savePath` is given, each model's PDE (and map) is also written there as
 #' `pde_<model>.tif` (and `pdeMap_<model>.tif`), with `key` (e.g. "year2030") at the end of the file
-#' name if given.
+#' name if given, and the list also has `files`: the paths written, as `pde` (and `pdeMap`), each
+#' named by model.
 
 makePDEs <- function(mods, envLayers, studyAreaCaribou = NULL, studyArea_juris = NULL, normalizePDE = TRUE,
                      savePath = NULL, key = NULL) {
@@ -38,19 +39,12 @@ makePDEs <- function(mods, envLayers, studyAreaCaribou = NULL, studyArea_juris =
     pdeMap <- NULL
   }
 
-  # save outputs
-  if (!is.null(savePath)) {
-    for (mn in names(UDlist)) {
-      suffix <- paste(c(mn, key), collapse = "_")
-      terra::writeRaster(pde[[mn]], file.path(savePath, paste0('pde_', suffix, ".tif")),
-                         filetype = "GTiff", overwrite = TRUE)
+  out <- list(pde = pde, pdeMap = pdeMap)
 
-      if (!is.null(pdeMap)) {
-        terra::writeRaster(pdeMap[[mn]], file.path(savePath, paste0('pdeMap_', suffix, ".tif")),
-                           filetype = "GTiff", overwrite = TRUE)
-      }
-    }
+  # save outputs, and return the paths written
+  if (!is.null(savePath)) {
+    out$files <- writePDEs(pde, pdeMap, savePath, key)
   }
 
-  return(list(pde = pde, pdeMap = pdeMap))
+  return(out)
 }

@@ -49,3 +49,23 @@ test_that("makePDEs() writes each model's PDE and map as one GeoTIFF each, with 
     expect_true(terra::compareGeom(terra::rast(f), fixture_envlayers()$x, stopOnError = FALSE))
   }
 })
+
+test_that("makePDEs() returns the paths it wrote, by model, and none without savePath", {
+  coefs <- fixture_coefs()
+  dir <- withr::local_tempdir()
+  ud <- makePDEs(mods = list(global = coefs, BC = coefs), envLayers = fixture_envlayers(),
+                 studyAreaCaribou = fixture_area(), studyArea_juris = list(BC = fixture_area()),
+                 normalizePDE = TRUE, savePath = dir, key = "year2030")
+
+  expect_named(ud$files, c("pde", "pdeMap"))
+  expect_named(ud$files$pde, c("global", "BC"))
+  expect_identical(unname(basename(ud$files$pde)), c("pde_global_year2030.tif", "pde_BC_year2030.tif"))
+  expect_identical(unname(basename(ud$files$pdeMap)), c("pdeMap_global_year2030.tif", "pdeMap_BC_year2030.tif"))
+  expect_true(all(file.exists(unlist(ud$files))))
+
+  raw <- makePDEs(mods = list(global = coefs), envLayers = fixture_envlayers(), studyAreaCaribou = fixture_area(),
+                  normalizePDE = FALSE, savePath = dir)
+  expect_named(raw$files, "pde")
+  expect_null(makePDEs(mods = list(global = coefs), envLayers = fixture_envlayers(),
+                       studyAreaCaribou = fixture_area())$files)
+})
