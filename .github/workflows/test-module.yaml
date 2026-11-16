@@ -51,10 +51,26 @@ jobs:
             any::terra
             any::tidyterra
             any::viridis
-            github::PredictiveEcology/Require@d6e3df6f63026d3b1047f2ca28632685553521b4
-            github::PredictiveEcology/quickPlot@a49fab61de547aaffd7f8fb5629571f88b4022f9
-            github::PredictiveEcology/reproducible@b56c3003823a3bf5bd129dc1ebcdccb64c339589
-            github::PredictiveEcology/SpaDES.core@a21acb0493692ea305560893702b2401d01da8ee
+            any::remotes
+            any::Require
+            any::quickPlot
+            any::reproducible
+            any::SpaDES.core
+
+      ## the pinned commits go over the CRAN versions, without their dependencies: SpaDES.core's
+      ## Remotes ask for reproducible@development, which pak treats as a conflict with any pin
+      ## once that branch moves on
+      - name: Install pinned PredictiveEcology packages
+        env:
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          remotes::install_github(c(
+            "PredictiveEcology/Require@d6e3df6f63026d3b1047f2ca28632685553521b4",
+            "PredictiveEcology/reproducible@b56c3003823a3bf5bd129dc1ebcdccb64c339589",
+            "PredictiveEcology/quickPlot@a49fab61de547aaffd7f8fb5629571f88b4022f9",
+            "PredictiveEcology/SpaDES.core@a21acb0493692ea305560893702b2401d01da8ee"
+          ), dependencies = FALSE, upgrade = "never")
+        shell: Rscript {0}
 
       ## tests/run-tests.R limits the tests to 2 cores, as CRAN asks
       - name: Run tests
