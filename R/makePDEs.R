@@ -1,15 +1,17 @@
-#' @title make caribou PDEs for each model, over each model's own area
+#' @title make caribou PDEs for each model, over each model's area
 #' @export
 #' @author Julie W. Turner
 #' @return a list with `pde` (the normalized PDE, or the raw utility if `normalizePDE` is FALSE) and
 #' `pdeMap` (the binned maps, NULL if `normalizePDE` is FALSE), each a list with one raster per model,
 #' named as `mods`. The global model covers `studyAreaCaribou`, and each regional model its area in
-#' `studyArea_juris`. If `savePath` is given, each model's PDE (and map) is also written there as
-#' `pde_<model>.tif` (and `pdeMap_<model>.tif`), with `key` (e.g. "year2030") at the end of the file
-#' name if given. Stops naming any layer a model reads that `envLayers` lacks.
+#' `studyArea_juris`, unless `pdeArea` picks the reporting area (see `getStudyAreaForModel()`): each
+#' PDE is normalized and binned within its area. If `savePath` is given, each model's PDE (and map) is
+#' also written there as `pde_<model>.tif` (and `pdeMap_<model>.tif`), with `key` (e.g. "year2030")
+#' at the end of the file name if given. Stops naming any layer a model reads that `envLayers` lacks.
 
 makePDEs <- function(mods, envLayers, studyAreaCaribou = NULL, studyArea_juris = NULL, normalizePDE = TRUE,
-                     savePath = NULL, key = NULL) {
+                     savePath = NULL, key = NULL, studyAreaReporting = NULL,
+                     pdeArea = c("fullArea", "regionalArea")) {
 
   checkModelLayers(mods, ls(envLayers))
 
@@ -18,7 +20,9 @@ makePDEs <- function(mods, envLayers, studyAreaCaribou = NULL, studyArea_juris =
     sa <- getStudyAreaForModel(
       modelName = mn,
       studyArea_juris = studyArea_juris,
-      studyAreaCaribou = studyAreaCaribou
+      studyAreaCaribou = studyAreaCaribou,
+      studyAreaReporting = studyAreaReporting,
+      pdeArea = pdeArea
     )
 
     mod2UD(

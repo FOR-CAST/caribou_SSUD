@@ -57,3 +57,12 @@ test_that("makePDEs() stops naming a layer a model reads that the landscape lack
     "'global'.*: z$"
   )
 })
+
+test_that("makePDEs() normalizes each PDE within the area pdeArea picks", {
+  coefs <- fixture_coefs()
+  ud <- makePDEs(mods = list(global = coefs), envLayers = fixture_envlayers(), studyAreaCaribou = fixture_area(),
+                 studyAreaReporting = fixture_area(xmin = 1), pdeArea = "fullReportingArea")
+
+  expect_equal(as.vector(is.na(terra::values(ud$pde$global))), c(TRUE, FALSE, TRUE, FALSE))
+  expect_equal(terra::global(ud$pde$global, "sum", na.rm = TRUE)[[1]], 1)
+})

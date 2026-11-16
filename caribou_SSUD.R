@@ -44,6 +44,16 @@ defineModule(sim, list(
                            " or a URL (e.g. of a .zip on Google Drive) holding `pde_<model>.tif` (and",
                            " `pdeMap_<model>.tif` if normalizePDE) for each model, as this module writes",
                            " them. If NA, the baseline is made from modelLand and saved to outputPath.")),
+    defineParameter("pdeArea", "character", c("fullArea", "regionalArea"), NA, NA,
+                    paste0("The area each PDE is predicted, normalized (summed to 1) and binned into",
+                           " its map over, so a map compares cells within that area. One choice for",
+                           " the global model: 'fullArea' (studyAreaCaribou, the area the global model",
+                           " was fit on) or 'fullReportingArea' (studyAreaReporting, which may reach",
+                           " beyond the fitted area); and one for the regional models: 'regionalArea'",
+                           " (the model's region in studyArea_juris) or 'regionalReportingArea' (the",
+                           " part of studyAreaReporting inside the model's region). Only the choice for",
+                           " the models run (simulationScale) is used. The 'Reporting' choices need",
+                           " studyAreaReporting.")),
     defineParameter("normalizePDE", "logical", TRUE,
                     desc = "Whether to normalize PDE inside SSUD (FALSE for tmux workflow)"),
     defineParameter("jurisdiction", "character",c("BC","SK","MB", "ON", "NTYT", "NT"),
@@ -107,7 +117,12 @@ defineModule(sim, list(
                                "Capped distances carry `_adj` (e.g. `dist_paved_240_adj`). If not",
                                "supplied, `modelLand.tif` is downloaded from outputFolderID.")),
     expectsInput(objectName = "studyAreaCaribou", objectClass = "SpatVector",
-                 desc = "a single polygon derived from the full extent of caribou locations used for the global model"),
+                 desc = paste("The area of the global model: a polygon of the full extent of the caribou",
+                              "locations it was fit on. If not supplied, studyArea is used.")),
+    expectsInput(objectName = "studyAreaReporting", objectClass = "SpatVector",
+                 desc = paste("Optional: the area the results are reported for (e.g. a range buffer",
+                              "clipped to a jurisdiction), a SpatVector or sf polygon. Used only when",
+                              "pdeArea is 'fullReportingArea' or 'regionalReportingArea'.")),
     expectsInput(objectName = "rasterToMatch", objectClass = "SpatRaster",
                  desc = paste("Dynamic mode: the simulation's grid, e.g. the one LandR and scfm use. The",
                               "forecast layers are built on it, and every modelLand layer must be on it",
@@ -328,7 +343,8 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
       mods <- pdeModels(names(sim$pde), P(sim)$ecotype, sim$iSSAmodels, sim$iSSAcoefficients)
       ud <- makePDEs(mods = mods, envLayers = sim$simEnv[[key]], studyAreaCaribou = sim$studyAreaCaribou,
                      studyArea_juris = sim$studyArea_juris, normalizePDE = P(sim)$normalizePDE,
-                     savePath = outDir, key = key)
+                     savePath = outDir, key = key, studyAreaReporting = sim$studyAreaReporting,
+                     pdeArea = P(sim)$pdeArea)
       sim$simPde[[key]] <- ud$pde
       sim$simPdeMap[[key]] <- ud$pdeMap
 
@@ -356,6 +372,8 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
 
   # the models the baseline (and forecasts) predict
   modelNames <- pdeModelNames(P(sim)$simulationScale, P(sim)$jurisdiction)
+  # stops early for a pdeArea that does not fit the models run
+  checkPdeArea(P(sim)$pdeArea, modelNames, suppliedElsewhere("studyAreaReporting", sim))
 
   # load caribou studyArea
   if (!suppliedElsewhere("studyAreaCaribou", sim)) {
@@ -491,7 +509,8 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "baselineYear", "pde")) 
       ud <- makePDEs(mods = mods,
                      envLayers = envlayers, studyAreaCaribou = sim$studyAreaCaribou,
                      studyArea_juris = sim$studyArea_juris, normalizePDE = P(sim)$normalizePDE,
-                     savePath = outDir)
+                     savePath = outDir, studyAreaReporting = sim$studyAreaReporting,
+                     pdeArea = P(sim)$pdeArea)
       message("Baseline PDEs saved to: ", outDir)
     }
 
