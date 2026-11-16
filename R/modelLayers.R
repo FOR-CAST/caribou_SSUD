@@ -1,26 +1,68 @@
-# the landscape layers a model reads: the variables in its end-of-step terms, without `_end`, e.g.
-# "prop_forest_240" from "prop_forest_240_end:prop_forest_1200_end"; movement terms (sl_, ta_) and
-# season terms name no `_end` variable, so are left out. `mod` is as for coef_tab()
-modelLayerNames <- function(mod) {
+# reads a model's end-of-step terms (those naming a variable ending in `_end`); each term is split at
+# `:` into its parts. Returns a list:
+# - `layers`: the landscape layers read, without `_end`, e.g. "prop_forest_240" from
+#   "prop_forest_240_end:prop_forest_1200_end";
+# - `categorical`: one row per level of a categorical layer, which glmmTMB names as the variable then
+#   the level, e.g. "lc_endopen" (layer "lc", level "open");
+# - `other`: the other parts of these terms, e.g. "seasonwinter" in "seasonwinter:prop_forest_240_end".
+# Movement terms (sl_, ta_) and season terms name no `_end` variable, so are left out. `mod` is as
+# for coef_tab()
+readModelTerms <- function(mod) {
 
   terms <- coef_tab(mod)$term
-  terms <- terms[grepl("_end", terms)]
+  parts <- unique(unlist(strsplit(terms[grepl("_end", terms)], ":", fixed = TRUE)))
 
-  vars <- unlist(lapply(terms, function(tm) {
-    tryCatch(all.vars(str2lang(tm)),
-             error = function(e) stop("Cannot read the model term '", tm, "' as an R expression", call. = FALSE))
-  }))
+  layers <- character()
+  categorical <- data.frame(layer = character(), level = character())
+  other <- character()
 
-  unique(sub("_end$", "", grep("_end$", vars, value = TRUE)))
+  for (p in parts) {
+    vars <- tryCatch(all.vars(str2lang(p)), error = function(e) NULL)
+
+    if (!is.null(vars) && length(vars) && all(grepl("_end$", vars))) {
+      layers <- c(layers, sub("_end$", "", vars))
+
+    } else if (grepl("^[A-Za-z.][A-Za-z0-9._]*_end.", p)) {
+      # a categorical layer: the variable name up to its first `_end`, then the level
+      categorical <- rbind(categorical, data.frame(layer = sub("_end.*$", "", p),
+                                                   level = sub("^.*?_end", "", p, perl = TRUE)))
+    } else {
+      other <- c(other, p)
+    }
+  }
+
+  list(layers = unique(c(layers, categorical$layer)), categorical = unique(categorical),
+       other = unique(other))
 }
 
-# stops naming any layer a model reads that `layerNames` (the landscape's layers) lacks; with
-# `warnCapped`, also warns when a model reads an uncapped distance, X, while the landscape has its
-# capped copy, X_adj: the model may have been fit on capped values under the plain name
+# the landscape layers a model reads (see readModelTerms())
+modelLayerNames <- function(mod) {
+  readModelTerms(mod)$layers
+}
+
+# stops for what the module cannot predict from yet: a model with seasons (or another variable that
+# is not a landscape layer) in its end-of-step terms, or with a categorical layer; then stops naming
+# any layer a model reads that `layerNames` (the landscape's layers) lacks. With `warnCapped`, also
+# warns when a model reads an uncapped distance, X, while the landscape has its capped copy, X_adj:
+# the model may have been fit on capped values under the plain name
 checkModelLayers <- function(mods, layerNames, warnCapped = FALSE) {
 
   for (mn in names(mods)) {
-    needed <- modelLayerNames(mods[[mn]])
+    terms <- readModelTerms(mods[[mn]])
+
+    if (length(terms$other)) {
+      stop("The '", mn, "' model's landscape terms also hold ", paste(terms$other, collapse = ", "),
+           ", which are not landscape layers (e.g. seasons). Models with seasons are not supported yet.",
+           call. = FALSE)
+    }
+
+    if (nrow(terms$categorical)) {
+      stop("The '", mn, "' model has categorical landscape layers, which are not supported yet: ",
+           paste0(terms$categorical$layer, " (level '", terms$categorical$level, "')", collapse = ", "),
+           call. = FALSE)
+    }
+
+    needed <- terms$layers
 
     missing <- setdiff(needed, layerNames)
     if (length(missing)) {

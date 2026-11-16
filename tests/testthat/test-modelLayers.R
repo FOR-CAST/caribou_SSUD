@@ -60,3 +60,20 @@ test_that("ssudGrid() stops naming the modelLand layers not on rasterToMatch's g
   land$y <- terra::disagg(land$y, 2)
   expect_error(ssudGrid(land), "first modelLand layer.*: y$")
 })
+
+test_that("readModelTerms() finds categorical layers and other variables, e.g. seasons, in the landscape terms", {
+  coefs <- nm_terms(c("x_end", "lc_endopen", "lc_endmixed wood", "x_end:seasonwinter",
+                      "seasonwinter:I(log((sl_ + 1)/1000))", "seasonwinter"))
+  terms <- readModelTerms(coefs)
+
+  expect_identical(terms$layers, c("x", "lc"))
+  expect_identical(terms$categorical, data.frame(layer = c("lc", "lc"), level = c("open", "mixed wood")))
+  expect_identical(terms$other, "seasonwinter")
+})
+
+test_that("checkModelLayers() stops for a season model or a categorical layer, naming them", {
+  expect_error(checkModelLayers(list(global = nm_terms("seasonwinter:prop_forest_240_end")), "prop_forest_240"),
+               "'global'.*seasonwinter.*not supported yet")
+  expect_error(checkModelLayers(list(global = nm_terms(c("x_end", "lc_endopen"))), c("x", "lc")),
+               "categorical.*lc \\(level 'open'\\)")
+})
