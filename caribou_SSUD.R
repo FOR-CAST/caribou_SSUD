@@ -100,7 +100,12 @@ defineModule(sim, list(
     expectsInput(objectName = "timeSinceFire", objectClass = "SpatRaster",
                  desc = "If dynamic, map of time since last burn used in model"),
     expectsInput(objectName = "modelLand", objectClass = "list",
-                  desc = "A list of rasters aligned with the model outputs to be used in UD modules"),
+                  desc = paste("The landscape layers the models read: a named list of SpatRasters on one",
+                               "grid, each named as in the model's terms without `_end` (e.g.",
+                               "`prop_forest_240` for the term `prop_forest_240_end`). The layers needed",
+                               "are read from the terms, and a missing one stops the run, naming it.",
+                               "Capped distances carry `_adj` (e.g. `dist_paved_240_adj`). If not",
+                               "supplied, `modelLand.tif` is downloaded from outputFolderID.")),
     expectsInput(objectName = "studyAreaCaribou", objectClass = "SpatVector",
                  desc = "a single polygon derived from the full extent of caribou locations used for the global model"),
     expectsInput(objectName = "rasterToMatch_SSUD", objectClass = "spatRaster",
@@ -473,7 +478,11 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "baselineYear", "pde")) 
                             parent = baseenv())
       outDir <- reproducible::checkPath(file.path(outputPath(sim), paste0('pde_', P(sim)$.studyAreaName)), create = T)
 
-      ud <- makePDEs(mods = pdeModels(modelNames, P(sim)$ecotype, sim$iSSAmodels, sim$iSSAcoefficients),
+      mods <- pdeModels(modelNames, P(sim)$ecotype, sim$iSSAmodels, sim$iSSAcoefficients)
+      # stops naming any layer the models read that modelLand lacks; warns if one may need `_adj`
+      checkModelLayers(mods, names(sim$modelLand), warnCapped = TRUE)
+
+      ud <- makePDEs(mods = mods,
                      envLayers = envlayers, studyAreaCaribou = sim$studyAreaCaribou,
                      studyArea_juris = sim$studyArea_juris, normalizePDE = P(sim)$normalizePDE,
                      savePath = outDir)

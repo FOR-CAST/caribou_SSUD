@@ -6,10 +6,13 @@
 #' named as `mods`. The global model covers `studyAreaCaribou`, and each regional model its area in
 #' `studyArea_juris`. If `savePath` is given, each model's PDE (and map) is also written there as
 #' `pde_<model>.tif` (and `pdeMap_<model>.tif`), with `key` (e.g. "year2030") at the end of the file
-#' name if given.
+#' name if given. Stops naming any layer a model reads that `envLayers` lacks.
 
 makePDEs <- function(mods, envLayers, studyAreaCaribou = NULL, studyArea_juris = NULL, normalizePDE = TRUE,
                      savePath = NULL, key = NULL) {
+
+  checkModelLayers(mods, ls(envLayers))
+
   UDlist <- lapply(names(mods), function(mn) {
 
     sa <- getStudyAreaForModel(

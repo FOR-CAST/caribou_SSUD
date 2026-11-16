@@ -49,3 +49,11 @@ test_that("makePDEs() writes each model's PDE and map as one GeoTIFF each, with 
     expect_true(terra::compareGeom(terra::rast(f), fixture_envlayers()$x, stopOnError = FALSE))
   }
 })
+
+test_that("makePDEs() stops naming a layer a model reads that the landscape lacks", {
+  coefs <- data.table::data.table(term = c("x_end", "z_end"), estimate = c(0.5, 1))
+  expect_error(
+    makePDEs(mods = list(global = coefs), envLayers = fixture_envlayers(), studyAreaCaribou = fixture_area()),
+    "'global'.*: z$"
+  )
+})

@@ -192,3 +192,12 @@ test_that("a static run makes only the baseline, and schedules no forecast", {
   expect_named(sim$pde, "global")
   expect_null(sim$simPde)
 })
+
+test_that("a static run stops naming a layer the model reads that modelLand lacks", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+  objs <- nm_objects()
+  objs$modelLand$y <- NULL
+
+  expect_error(run_simInit(paths, objs), "'global'.*: y$")
+})
