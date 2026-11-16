@@ -72,6 +72,7 @@ test_that("the module's metadata parses, with the inputs .inputObjects() fetches
   md <- SpaDES.core::moduleMetadata(module = "caribou_SSUD", path = paths$modulePath)
   expect_contains(md$inputObjects$objectName, c("iSSAmodels", "modelLand"))
   expect_contains(md$parameters$paramName, c("ecotype", "outputFolderID", "normalizePDE"))
+  expect_equal(md$parameters$default[[which(md$parameters$paramName == "ts_else")]], 200)
 })
 
 test_that("simInit() takes supplied inputs as they are and downloads nothing", {
