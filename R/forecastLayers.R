@@ -127,18 +127,21 @@ forestLayer <- function(name, nowCells, startCells, modelLand, windowRadius = li
 
 # the forecast of time-since layers (years since fire or harvest) for `year`. The grid-cell event
 # year comes from modelLand's layer of the same covariate on the grid (`baseLayer`; the event year is
-# baselineYear minus its value; NA, or `tsElse` or more, = no event), replaced by the year from
-# `simTimeSince` (e.g. scfm's timeSinceFire: years since an event in the simulation, NA = none) where
-# that is more recent. Coarser layers take, of the grid cells' event years (na.rm), the most recent
-# (`coarse` "recent") or the mean ("mean"). Then years since = year - event year; NA (no event) =
-# `tsElse`
+# baselineYear minus its value), replaced by the year from `simTimeSince` (e.g. scfm's timeSinceFire:
+# years since an event in the simulation, NA = none) where that is more recent. A cell has no event
+# where `baseLayer` is NA and either `noEventYear` is NA and the value is `tsElse` or more, or the
+# event year is `noEventYear` or earlier (a modelLand that stores "never" as years since a stand-in
+# year, e.g. 1900). Coarser layers take, of the grid cells' event years (cells with no event left
+# out), the most recent (`coarse` "recent") or the mean ("mean"). Then years since = year - event
+# year; a cell with no event gets `tsElse`, or year - noEventYear when that is set
 timeSinceLayers <- function(names, baseLayer, year, baselineYear, tsElse, simTimeSince = NULL,
-                            coarse = "recent") {
+                            coarse = "recent", noEventYear = NA) {
   fun <- switch(coarse, recent = "max", mean = "mean",
                 stop("fireCoarse must be 'recent' or 'mean'", call. = FALSE))
 
   eventYear <- baselineYear - baseLayer
-  eventYear <- terra::ifel(baseLayer >= tsElse, NA, eventYear)
+  noEvent <- if (is.na(noEventYear)) baseLayer >= tsElse else eventYear <= noEventYear
+  eventYear <- terra::ifel(noEvent, NA, eventYear)
 
   if (!is.null(simTimeSince)) {
     simYear <- year - simTimeSince
@@ -146,9 +149,10 @@ timeSinceLayers <- function(names, baseLayer, year, baselineYear, tsElse, simTim
                              simYear, eventYear)
   }
 
+  fill <- if (is.na(noEventYear)) tsElse else year - noEventYear
   out <- lapply(names, function(n) {
     ts <- year - toResolution(eventYear, parseLayerName(n)$res, fun)
-    ts <- terra::ifel(is.na(ts), tsElse, ts)
+    ts <- terra::ifel(is.na(ts), fill, ts)
     names(ts) <- n
     ts
   })
@@ -213,7 +217,8 @@ buildForecastLayers <- function(layers, sources, year, modelLand, grid, objs, p)
       ns <- these[info$stem[match(these, info$layer)] == stem]
       out[ns] <- as.list(timeSinceLayers(ns, timeSinceBase(stem, modelLand, cellSize), year,
                                          p$baselineYear, p$ts_else, simTs,
-                                         if (is.null(p$fireCoarse)) "recent" else p$fireCoarse))
+                                         if (is.null(p$fireCoarse)) "recent" else p$fireCoarse,
+                                         noEventYearFor(src, p$noEventYear)))
     }
   }
 
@@ -233,6 +238,13 @@ buildForecastLayers <- function(layers, sources, year, modelLand, grid, objs, p)
   out <- terra::rast(unname(out[layers]))
   names(out) <- layers
   out
+}
+
+# the stand-in year meaning "no event" in modelLand's time-since layers of a source ("fire",
+# "harvest"), from the noEventYear parameter; NA if not set
+noEventYearFor <- function(src, noEventYear) {
+  y <- noEventYear[[src]]
+  if (is.null(y)) NA_real_ else as.numeric(y)
 }
 
 # the LandR forest types counted for a forest covariate (e.g. prop_forest), from forestTypes

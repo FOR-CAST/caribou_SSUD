@@ -129,6 +129,46 @@ test_that("timeSinceLayers() takes the more recent of modelLand's and the simula
   expect_equal(unlist(aged[1:4]), c(15, 20, 200, 200), ignore_attr = TRUE)
 })
 
+test_that("timeSinceLayers() reads a stand-in no-event year (noEventYear) as no event", {
+  ## as the boreal NWT modelLand: baseline 2022, never burned = years since 1900 (122)
+  base <- fixture_grid(122)
+  base[1] <- 2                        # burned 2020
+  base[2] <- 122                      # never
+  base[3] <- 10                       # burned 2012
+  simTs <- fixture_grid(NA)
+  simTs[2] <- 1                       # burned 2026 in the simulation
+
+  out <- timeSinceLayers(c("timeSinceFire", "ts_fire_1200"), base, 2027, 2022, 200, simTs,
+                         noEventYear = 1900)
+  ## never-burned cells keep counting from 1900, as the model was fit
+  expect_equal(unlist(out$timeSinceFire[1:4]), c(7, 1, 15, 127), ignore_attr = TRUE)
+  ## the stand-in is left out of the block: most recent of 2020, 2026, 2012
+  expect_equal(out$ts_fire_1200[1][[1]], 1)
+  expect_equal(out$ts_fire_1200[100][[1]], 127)
+  expect_equal(timeSinceLayers("ts_fire_1200", base, 2027, 2022, 200, simTs, coarse = "mean",
+                               noEventYear = 1900)[1][[1]],
+               2027 - mean(c(2020, 2026, 2012)))
+
+  ## a ts_else below the stand-in does not matter once noEventYear is set
+  out <- timeSinceLayers("timeSinceFire", base, 2027, 2022, 100, noEventYear = 1900)
+  expect_equal(unlist(out[c(2, 3)]), c(127, 15), ignore_attr = TRUE)
+
+  ## without noEventYear the stand-in would be read as a fire in 1900 (aged) unless >= ts_else
+  out <- timeSinceLayers("timeSinceFire", base, 2027, 2022, 100)
+  expect_equal(out[2][[1]], 100)
+})
+
+test_that("buildForecastLayers() takes each source's noEventYear", {
+  ml <- list(timeSinceFire = fixture_grid(122), timeSinceHarvest = fixture_grid(72))
+  layers <- names(ml)
+  sources <- layerSources(layers, defaultDynamicLayers("boreal"))
+  p <- list(baselineYear = 2022, ts_else = 100, noEventYear = list(fire = 1900, harvest = 1950))
+  out <- suppressMessages(buildForecastLayers(layers, sources, 2027, ml, fixture_grid(), objs = list(), p = p))
+  expect_equal(out$timeSinceFire[1][[1]], 127)
+  expect_equal(out$timeSinceHarvest[1][[1]], 77)
+  expect_true(is.na(noEventYearFor("harvest", list(fire = 1900))))
+})
+
 test_that("timeSinceBase() finds modelLand's layer of the covariate on the grid", {
   ml <- list(ts_fire_240 = fixture_grid(1), ts_fire_1200 = fixture_grid(2), timeSinceHarvest = fixture_grid(3))
   expect_equal(timeSinceBase("ts_fire", ml, 240)[1][[1]], 1)

@@ -26,7 +26,16 @@ defineModule(sim, list(
     defineParameter("baselineYear", "integer", 2025L, NA, NA,
                     paste0("The year modelLand describes: its time-since layers (e.g. ts_fire_240) count",
                            " years back from it. Forecasts count from it too, and the simulation should",
-                           " start in it (LandR's stands at the start are compared with modelLand's).")),
+                           " start in it (LandR's stands at the start are compared with modelLand's).",
+                           " 2025 for the northern mountain modelLand; 2022 for the boreal NWT one.")),
+    defineParameter("noEventYear", "list", list(fire = NA, harvest = NA), NA, NA,
+                    paste0("How modelLand's time-since layers store cells with no fire (or harvest),",
+                           " by source: NA = such cells are NA (or ts_else or more), and forecasts give",
+                           " them ts_else; a year = they hold the years since that stand-in year (e.g.",
+                           " 1900: 122 with baselineYear 2022), and forecasts give them the years since",
+                           " it (year - noEventYear), as the model was fit. Either way they are left out",
+                           " of coarser layers' fire years. E.g. the boreal NWT modelLand (baselineYear",
+                           " 2022): list(fire = 1900, harvest = 1900).")),
     defineParameter("dynamicLayers", "list", NULL, NA, NA,
                     paste0("Dynamic mode: which of the layers the models read are forecast, and from",
                            " what: a named list, source = a regular expression matched against layer",
@@ -352,6 +361,10 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
   }
   if (length(P(sim)$fireCoarse) != 1 || !P(sim)$fireCoarse %in% c("recent", "mean")) {
     stop("fireCoarse must be one of 'recent' or 'mean'")
+  }
+  badSrc <- setdiff(names(P(sim)$noEventYear), c("fire", "harvest"))
+  if (length(badSrc)) {
+    stop("noEventYear takes the sources 'fire' and 'harvest', not: ", paste(badSrc, collapse = ", "))
   }
   if (length(P(sim)$forestForecast) != 1 || !P(sim)$forestForecast %in% c("change", "LandR")) {
     stop("forestForecast must be one of 'change' or 'LandR'")
