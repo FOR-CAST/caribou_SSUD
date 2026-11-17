@@ -44,9 +44,9 @@ defineModule(sim, list(
                            " ages) and 'disturbance' (not yet forecast: kept as in modelLand). A layer",
                            " that matches no pattern stays as in modelLand (e.g. vegetation). NULL = the",
                            " ecotype's default: northern mountain list(forest = '^prop_forest_', fire =",
-                           " '^ts_fire_', disturbance = '^dist_'); boreal list(forest =",
-                           " '^prop_(needleleaf|mixedforest)$', fire = '^timeSinceFire$', harvest =",
-                           " '^timeSinceHarvest$', disturbance = '^dist').")),
+                           " '^ts_fire_', harvest = '^ts_harv(est)?_', disturbance = '^dist_'); boreal",
+                           " list(forest = '^prop_(needleleaf|mixedforest)$', fire = '^timeSinceFire$',",
+                           " harvest = '^timeSinceHarvest$', disturbance = '^dist').")),
     defineParameter("windowRadius", "list", list("240" = 500), NA, NA,
                     paste0("Dynamic mode: radius (m) of the circle forest shares are averaged in, by",
                            " layer resolution (m), as hsaCEtool's `window_m`: list('240' = 500) = a",
@@ -60,6 +60,11 @@ defineModule(sim, list(
                            " the current northern mountain models (full_to2020) were made; 'mean' = the",
                            " mean fire year, as hsaCEtool will make them. Use the rule the model was fit",
                            " with. TODO: default to 'mean' once the models are refit.")),
+    defineParameter("harvestCoarse", "character", "recent", NA, NA,
+                    paste0("Dynamic mode: as fireCoarse, for harvest layers coarser than the grid (e.g.",
+                           " ts_harv_1200): 'recent' = the most recent harvest in the block; 'mean' =",
+                           " the mean harvest year (unharvested cells left out). Use the rule the model",
+                           " was fit with.")),
     defineParameter("forestMinBiomass", "numeric", 0, 0, NA,
                     paste0("Dynamic mode: a LandR cell is forest when its stand has more than this",
                            " much tree biomass (g/m2, LandR's unit for B); 0 = any tree biomass.")),
@@ -359,8 +364,10 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
   if (length(P(sim)$ecotype) != 1 || !P(sim)$ecotype %in% c("boreal", "northern_mountain")) {
     stop("ecotype must be one of 'boreal' or 'northern_mountain'")
   }
-  if (length(P(sim)$fireCoarse) != 1 || !P(sim)$fireCoarse %in% c("recent", "mean")) {
-    stop("fireCoarse must be one of 'recent' or 'mean'")
+  for (prm in c("fireCoarse", "harvestCoarse")) {
+    if (length(P(sim)[[prm]]) != 1 || !P(sim)[[prm]] %in% c("recent", "mean")) {
+      stop(prm, " must be one of 'recent' or 'mean'")
+    }
   }
   badSrc <- setdiff(names(P(sim)$noEventYear), c("fire", "harvest"))
   if (length(badSrc)) {

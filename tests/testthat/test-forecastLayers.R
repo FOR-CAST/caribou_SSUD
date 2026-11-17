@@ -169,6 +169,23 @@ test_that("buildForecastLayers() takes each source's noEventYear", {
   expect_true(is.na(noEventYearFor("harvest", list(fire = 1900))))
 })
 
+test_that("buildForecastLayers() combines coarse fire and harvest layers by their own rules", {
+  base <- fixture_grid(NA)            # 2025: one block with events in 2015 and 2021
+  base[1] <- 10
+  base[2] <- 4
+  ml <- list(ts_fire_240 = base, ts_harv_240 = base)
+  layers <- c("ts_fire_1200", "ts_harv_1200")
+  sources <- layerSources(layers, defaultDynamicLayers("northern_mountain"))
+  expect_equal(unname(sources), c("fire", "harvest"))
+  expect_equal(unname(layerSources("ts_harvest_240", defaultDynamicLayers("northern_mountain"))), "harvest")
+  p <- list(baselineYear = 2025, ts_else = 200, fireCoarse = "recent", harvestCoarse = "mean")
+  out <- suppressMessages(buildForecastLayers(layers, sources, 2030, ml, fixture_grid(), objs = list(), p = p))
+  expect_equal(out$ts_fire_1200[1][[1]], 2030 - 2021)
+  expect_equal(out$ts_harv_1200[1][[1]], 2030 - mean(c(2015, 2021)))
+  ## not set: the most recent
+  expect_equal(coarseRule("harvest", list()), "recent")
+})
+
 test_that("timeSinceBase() finds modelLand's layer of the covariate on the grid", {
   ml <- list(ts_fire_240 = fixture_grid(1), ts_fire_1200 = fixture_grid(2), timeSinceHarvest = fixture_grid(3))
   expect_equal(timeSinceBase("ts_fire", ml, 240)[1][[1]], 1)

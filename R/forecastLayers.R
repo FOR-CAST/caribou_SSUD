@@ -8,7 +8,7 @@ defaultDynamicLayers <- function(ecotype) {
     list(forest = "^prop_(needleleaf|mixedforest)$", fire = "^timeSinceFire$",
          harvest = "^timeSinceHarvest$", disturbance = "^dist")
   } else {
-    list(forest = "^prop_forest_", fire = "^ts_fire_", disturbance = "^dist_")
+    list(forest = "^prop_forest_", fire = "^ts_fire_", harvest = "^ts_harv(est)?_", disturbance = "^dist_")
   }
 }
 
@@ -137,7 +137,7 @@ forestLayer <- function(name, nowCells, startCells, modelLand, windowRadius = li
 timeSinceLayers <- function(names, baseLayer, year, baselineYear, tsElse, simTimeSince = NULL,
                             coarse = "recent", noEventYear = NA) {
   fun <- switch(coarse, recent = "max", mean = "mean",
-                stop("fireCoarse must be 'recent' or 'mean'", call. = FALSE))
+                stop("fireCoarse / harvestCoarse must be 'recent' or 'mean'", call. = FALSE))
 
   eventYear <- baselineYear - baseLayer
   noEvent <- if (is.na(noEventYear)) baseLayer >= tsElse else eventYear <= noEventYear
@@ -217,7 +217,7 @@ buildForecastLayers <- function(layers, sources, year, modelLand, grid, objs, p)
       ns <- these[info$stem[match(these, info$layer)] == stem]
       out[ns] <- as.list(timeSinceLayers(ns, timeSinceBase(stem, modelLand, cellSize), year,
                                          p$baselineYear, p$ts_else, simTs,
-                                         if (is.null(p$fireCoarse)) "recent" else p$fireCoarse,
+                                         coarseRule(src, p),
                                          noEventYearFor(src, p$noEventYear)))
     }
   }
@@ -238,6 +238,13 @@ buildForecastLayers <- function(layers, sources, year, modelLand, grid, objs, p)
   out <- terra::rast(unname(out[layers]))
   names(out) <- layers
   out
+}
+
+# how a source's ("fire", "harvest") coarser layers combine the grid cells' event years: the
+# fireCoarse / harvestCoarse parameter, "recent" if not set
+coarseRule <- function(src, p) {
+  rule <- p[[paste0(src, "Coarse")]]
+  if (is.null(rule)) "recent" else rule
 }
 
 # the stand-in year meaning "no event" in modelLand's time-since layers of a source ("fire",
