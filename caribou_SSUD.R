@@ -23,8 +23,66 @@ defineModule(sim, list(
                            " never burned) in the time-since-fire and time-since-harvest layers. Use the",
                            " value the model was fit with (hsaCEtool's `ts_nodata`; 200 for the northern",
                            " mountain models).")),
-    defineParameter("histLandYears", "integer", 2010:2023, NA, NA,
-                    paste0("This is the year range we use past (not simulated) landscape layers.")),
+    defineParameter("baselineYear", "integer", 2025L, NA, NA,
+                    paste0("The year modelLand describes: its time-since layers (e.g. ts_fire_240) count",
+                           " years back from it. Forecasts count from it too, and the simulation should",
+                           " start in it (LandR's stands at the start are compared with modelLand's).",
+                           " 2025 for the northern mountain modelLand; 2022 for the boreal NWT one.")),
+    defineParameter("noEventYear", "list", list(fire = NA, harvest = NA), NA, NA,
+                    paste0("How modelLand's time-since layers store cells with no fire (or harvest),",
+                           " by source: NA = such cells are NA (or ts_else or more), and forecasts give",
+                           " them ts_else; a year = they hold the years since that stand-in year (e.g.",
+                           " 1900: 122 with baselineYear 2022), and forecasts give them the years since",
+                           " it (year - noEventYear), as the model was fit. Either way they are left out",
+                           " of coarser layers' fire years. E.g. the boreal NWT modelLand (baselineYear",
+                           " 2022): list(fire = 1900, harvest = 1900).")),
+    defineParameter("dynamicLayers", "list", NULL, NA, NA,
+                    paste0("Dynamic mode: which of the layers the models read are forecast, and from",
+                           " what: a named list, source = a regular expression matched against layer",
+                           " names. Sources: 'forest' (LandR's cohortData and pixelGroupMap), 'fire'",
+                           " (scfm's timeSinceFire), 'harvest' (no forecaster yet: the layer only",
+                           " ages) and 'disturbance' (not yet forecast: kept as in modelLand). A layer",
+                           " that matches no pattern stays as in modelLand (e.g. vegetation). NULL = the",
+                           " ecotype's default: northern mountain list(forest = '^prop_forest_', fire =",
+                           " '^ts_fire_', harvest = '^ts_harv(est)?_', disturbance = '^dist_'); boreal",
+                           " list(forest = '^prop_(needleleaf|mixedforest)$', fire = '^timeSinceFire$',",
+                           " harvest = '^timeSinceHarvest$', disturbance = '^dist').")),
+    defineParameter("windowRadius", "list", list("240" = 500), NA, NA,
+                    paste0("Dynamic mode: radius (m) of the circle forest shares are averaged in, by",
+                           " layer resolution (m), as hsaCEtool's `window_m`: list('240' = 500) = a",
+                           " 240 m layer (e.g. prop_forest_240) is the mean of the 240 m cells within",
+                           " 500 m. A resolution not listed gets no circle (e.g. prop_forest_1200 is the",
+                           " mean of the 240 m cells in each 1200 m block). Fire layers get no circle.")),
+    defineParameter("fireCoarse", "character", "recent", NA, NA,
+                    paste0("Dynamic mode: how a fire layer coarser than the grid (e.g. ts_fire_1200 on",
+                           " a 240 m grid) is built from the grid cells' fire years (unburned cells left",
+                           " out): 'recent' = the most recent fire in the block, as modelLand's layers and",
+                           " the current northern mountain models (full_to2020) were made; 'mean' = the",
+                           " mean fire year, as hsaCEtool will make them. Use the rule the model was fit",
+                           " with. TODO: default to 'mean' once the models are refit.")),
+    defineParameter("harvestCoarse", "character", "recent", NA, NA,
+                    paste0("Dynamic mode: as fireCoarse, for harvest layers coarser than the grid (e.g.",
+                           " ts_harv_1200): 'recent' = the most recent harvest in the block; 'mean' =",
+                           " the mean harvest year (unharvested cells left out). Use the rule the model",
+                           " was fit with.")),
+    defineParameter("forestMinBiomass", "numeric", 0, 0, NA,
+                    paste0("Dynamic mode: a LandR cell is forest when its stand has more than this",
+                           " much tree biomass (g/m2, LandR's unit for B); 0 = any tree biomass.")),
+    defineParameter("forestForecast", "character", "change", NA, NA,
+                    paste0("Dynamic mode: how forest layers are forecast. 'change' = modelLand's layer",
+                           " plus LandR's change since the start of the simulation (LandR now minus",
+                           " LandR at the start), kept within 0-1; 'LandR' = LandR's value alone.")),
+    defineParameter("forestTypes", "list",
+                    list(prop_forest = c("conifer", "deciduous", "mixed"), prop_needleleaf = "conifer",
+                         prop_mixedforest = c("deciduous", "mixed")), NA, NA,
+                    paste0("Dynamic mode: the LandR forest types each forest covariate counts, by",
+                           " covariate (the layer name without its resolution). Types: 'conifer'",
+                           " (conifer share of the stand's biomass at or above the upper",
+                           " mixedForestCutoff, 0.66), 'mixed' (between the cutoffs) and 'deciduous'",
+                           " (at or below the lower cutoff, 0.33).")),
+    defineParameter("sppEquivCol", "character", "LandR", NA, NA,
+                    paste0("Dynamic mode: the column of sppEquiv that holds cohortData's species",
+                           " codes, used to tell conifers from broadleaf species.")),
     defineParameter("simulationProcess", "character", "static", NA, NA,
                     paste0("Should the simulation use LandR (dynamic) or land cover map (static)?",
                            "defaults to static")),
@@ -108,10 +166,23 @@ defineModule(sim, list(
                               "even if the user supplies other initial groupings (e.g., via the `Biomass_borealDataPrep`",
                               "module.")),
     expectsInput(objectName = "timeSinceFire", objectClass = "SpatRaster",
-                 desc = "If dynamic, map of time since last burn used in model"),
+                 desc = paste("Dynamic mode: years since each cell last burned in the simulation, NA where",
+                              "it has not burned (as scfmSpread keeps it), on the forecast grid. Fire",
+                              "layers take a cell's fire year from it where that is more recent than",
+                              "modelLand's. If absent, fire layers only age.")),
+    expectsInput(objectName = "sppEquiv", objectClass = "data.table",
+                 desc = paste("Dynamic mode: LandR's species-equivalence table, with a `Type` column",
+                              "(Conifer/Deciduous) and the species codes in column sppEquivCol. If",
+                              "absent, LandR::sppEquivalencies_CA.")),
+    expectsInput(objectName = "forestBaseline", objectClass = "list",
+                 desc = paste("Dynamic mode, forestForecast 'change': LandR's forest at the start of the",
+                              "simulation, a named list of 0/1 SpatRasters on the forecast grid, one per",
+                              "forest covariate (e.g. prop_forest). If not supplied, made in init from",
+                              "cohortData and pixelGroupMap.")),
     expectsInput(objectName = "modelLand", objectClass = "list",
                   desc = paste("The landscape layers the models read: a named list of SpatRasters on one",
-                               "grid, each named as in the model's terms without `_end` (e.g.",
+                               "grid (or one multi-layer SpatRaster, made into that list), each named as",
+                               "in the model's terms without `_end` (e.g.",
                                "`prop_forest_240` for the term `prop_forest_240_end`). The layers needed",
                                "are read from the terms, and a missing one stops the run, naming it.",
                                "Capped distances carry `_adj` (e.g. `dist_paved_240_adj`). If not",
@@ -138,14 +209,15 @@ defineModule(sim, list(
     expectsInput(objectName = "pdeMap", objectClass = "list",
                  desc = "Baseline binned PDE maps, named as `pde`; NULL if normalizePDE is FALSE."),
     expectsInput(objectName = "fixedSSUD", objectClass = "SpatRaster",
-                 desc = paste("Dynamic mode: the modelLand layers that do not change in forecasts. If not",
-                              "supplied, taken from modelLand.")),
-    expectsInput(objectName = "baselineYear", objectClass = "numeric",
-                 desc = "Dynamic mode: year of the baseline landscape. Defaults to max(histLandYears).")
+                 desc = paste("Dynamic mode: the layers the models read that do not change in forecasts",
+                              "(those no dynamicLayers pattern matches), named as in the terms. If not",
+                              "supplied, taken from modelLand."))
   ),
   outputObjects = bindrows(
-    createsOutput("timeSinceFire", "SpatRaster",
-                  "If dynamic, map of time since last burn used in model - with pixels that never burn receiving NA"),
+    createsOutput(objectName = "fixedSSUD", objectClass = "SpatRaster",
+                  desc = "Dynamic mode: the layers that do not change in forecasts (see inputs)"),
+    createsOutput(objectName = "forestBaseline", objectClass = "list",
+                  desc = "Dynamic mode: LandR's forest at the start of the simulation (see inputs)"),
     createsOutput(objectName = 'pde', objectClass = 'list',
                   desc = 'Current (pre simulation) Raw pde calculation, one SpatRaster per model'),
     createsOutput(objectName = 'pdeMap', objectClass = 'list',
@@ -181,14 +253,16 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
         # the forecast grid; stops if modelLand is not on it
         grid <- ssudGrid(sim$modelLand, sim$rasterToMatch)
 
-        if(P(sim)$ecotype == 'boreal'){
-          sim$timeSinceFire <- postProcess(sim$modelLand$timeSinceFire,
-                                           to = grid)
-        }
-
-        if(P(sim)$ecotype == 'northern_mountain'){
-          sim$timeSinceFire <- postProcess(sim$modelLand$timeSinceFire,
-                                           to = grid)
+        # LandR's forest at the start, which forest layers' change is measured from
+        forestStems <- forecastForestStems(sim)
+        if (P(sim)$forestForecast == "change" && length(forestStems) && is.null(sim$forestBaseline) &&
+            !is.null(sim$cohortData) && !is.null(sim$pixelGroupMap)) {
+          checkOnGrid(sim$pixelGroupMap, grid, "pixelGroupMap")
+          if (time(sim) != P(sim)$baselineYear)
+            message("The simulation starts in ", time(sim), ", not baselineYear (", P(sim)$baselineYear,
+                    "): forest change is measured from LandR's stands in ", time(sim))
+          sim$forestBaseline <- makeForestBaseline(forestStems, sim$cohortData, sim$pixelGroupMap,
+                                                   P(sim), sim$sppEquiv)
         }
 
 
@@ -211,115 +285,27 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
       key <- paste0("year", thisYear)
       message(paste0("Simulating landscape for ", thisYear))
 
-      template <- ssudGrid(sim$modelLand, sim$rasterToMatch)
+      grid <- ssudGrid(sim$modelLand, sim$rasterToMatch)
 
+      # the layers the forecast models read, and the source that forecasts each (NA = fixed)
+      sources <- forecastSources(sim)
 
+      # fixed layers from fixedSSUD, the rest from modelLand
+      land <- sim$modelLand
+      if (!is.null(sim$fixedSSUD)) land[names(sim$fixedSSUD)] <- as.list(sim$fixedSSUD)
 
-      # ensure baseline fixed layers were created
-      if (is.null(sim$fixedSSUD) || is.null(sim$baselineYear))
-        stop("Missing sim$fixedSSUD / sim$baselineYear, which .inputObjects() makes in dynamic mode")
-
-      # Fixed layers from baseline
-
-      fixedResamp <- terra::resample(sim$fixedSSUD,  template, method = "average")
-      # prop_veg  <- terra::resample(sim$fixedSSUD$prop_veg,  template, method = "average")
-      # prop_wets <- terra::resample(sim$fixedSSUD$prop_wets, template, method = "average")
-      #
-      # distpaved   <- terra::resample(sim$fixedSSUD$distpaved,   template, method = "average")
-      # distunpaved <- terra::resample(sim$fixedSSUD$distunpaved, template, method = "average")
-      # distpolys   <- terra::resample(sim$fixedSSUD$distpolys,   template, method = "average")
-
-      # Dynamic forest layers from LandR
-      reclassForest <- reclassifyCohortData(
-        cohortData = sim$cohortData,
-        sppEquivCol = "LandR",
-        pixelGroupMap = sim$pixelGroupMap,
-        mixedForestCutoffs = c(0.33, 0.66)
+      simLand <- buildForecastLayers(
+        layers = names(sources), sources = sources, year = thisYear, modelLand = land, grid = grid,
+        objs = list(cohortData = sim$cohortData, pixelGroupMap = sim$pixelGroupMap, sppEquiv = sim$sppEquiv,
+                    timeSinceFire = sim$timeSinceFire, forestBaseline = sim$forestBaseline),
+        p = P(sim)
       )
 
-      ft <- reclassForest$`forest type`
-
-      if(P(sim)$ecotype == 'boreal'){
-        # Needleleaf
-        needle_mask <- terra::classify(
-          ft, rcl = matrix(c(210, 1), ncol = 2, byrow = TRUE), others = 0
-        )
-        prop_needleleaf <- terra::resample(needle_mask, template, method = "average")
-        names(prop_needleleaf) <- "prop_needleleaf"
-
-        # Mixedforest
-        mixed_mask <- terra::classify(
-          ft, rcl = matrix(c(220, 1, 230, 1), ncol = 2, byrow = TRUE),
-          others = 0
-        )
-        prop_mixedforest <- terra::resample(mixed_mask, template, method = "average")
-        names(prop_mixedforest) <- "prop_mixedforest"
-
-        forests <- c(prop_needleleaf, prop_mixedforest)
-      }
-
-      if(P(sim)$ecotype == 'northern_mountain'){
-        # all forest
-        forest_mask <- terra::classify(
-          ft, rcl = matrix(c(210, 1, 220, 1, 230, 1), ncol = 2, byrow = TRUE), others = 0
-        )
-        prop_forest_250 <- terra::resample(forest_mask, template, method = "average")
-        names(prop_forest_250) <- "prop_forest_250"
-
-        forests <- c(prop_forest_250)
-
-      }
-
-
-
-      message("Reclassifying forest layers")
-      # Dynamic timeSinceFire from scfmSpread
-      tsf <- reproducible::postProcess(sim$timeSinceFire, to = template)
-      tsf[is.na(tsf)] <- P(sim)$ts_else
-
-      message("Update timeSinceFire using scfm")
-
-      # age forward timeSinceHarvest
-      dt <- thisYear - sim$baselineYear
-
-      if(P(sim)$ecotype == 'boreal'){
-        names(tsf) <- "timeSinceFire"
-
-        tsh <- terra::resample(sim$fixedSSUD$timeSinceHarvest0, template, method = "average")
-        tsh <- tsh + dt
-        tsh[is.na(tsh)] <- P(sim)$ts_else
-        names(tsh) <- "timeSinceHarvest"
-        message("Moving harvest forward")
-
-        tsRasts <- c(tsf, tsh)
-      }
-
-      if(P(sim)$ecotype == 'northern_mountain'){
-        names(tsf) <- "ts_fires_250"
-
-        tsRasts <- tsf
-        #TODO update poly disturbances for harvest eventually
-        # tsh <- terra::resample(sim$fixedSSUD$timeSinceHarvest0, template, method = "average")
-        # tsh <- tsh + dt
-        # tsh[is.na(tsh)] <- P(sim)$ts_else
-        # names(tsh) <- "timeSinceHarvest"
-        # message("Moving harvest forward")
-      }
-
-
       # Bundle into env for make_pde eval()
-      simLand <- c(fixedResamp, forests, tsRasts)
-      # simLand needs to be exported to workflowOutputs for normalization model
-
       sim$simEnv[[key]] <- list2env(
         setNames(lapply(names(simLand), \(n) simLand[[n]]), names(simLand)),
         parent = baseenv()
       )
-      #message("needleleaf mean: ", terra::global(prop_needleleaf, "mean", na.rm=TRUE)[1,1])
-      #message("mixed mean: ", terra::global(prop_mixedforest, "mean", na.rm=TRUE)[1,1])
-      message("tsf mean: ", terra::global(tsf, "mean", na.rm=TRUE)[1,1])
-      #message("tsh mean: ", terra::global(tsh, "mean", na.rm=TRUE)[1,1])
-
 
       # save layers
       outDir <- reproducible::checkPath(file.path(outputPath(sim), paste0('pde_', P(sim)$.studyAreaName), 'sims'), create = T)
@@ -378,6 +364,18 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
 
   if (length(P(sim)$ecotype) != 1 || !P(sim)$ecotype %in% c("boreal", "northern_mountain")) {
     stop("ecotype must be one of 'boreal' or 'northern_mountain'")
+  }
+  for (prm in c("fireCoarse", "harvestCoarse")) {
+    if (length(P(sim)[[prm]]) != 1 || !P(sim)[[prm]] %in% c("recent", "mean")) {
+      stop(prm, " must be one of 'recent' or 'mean'")
+    }
+  }
+  badSrc <- setdiff(names(P(sim)$noEventYear), c("fire", "harvest"))
+  if (length(badSrc)) {
+    stop("noEventYear takes the sources 'fire' and 'harvest', not: ", paste(badSrc, collapse = ", "))
+  }
+  if (length(P(sim)$forestForecast) != 1 || !P(sim)$forestForecast %in% c("change", "LandR")) {
+    stop("forestForecast must be one of 'change' or 'LandR'")
   }
 
   # the models the baseline (and forecasts) predict
@@ -470,8 +468,8 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
   ready <- !is.null(sim$modelLand) &&
     !is.null(if (P(sim)$ecotype == "boreal") sim$iSSAmodels else sim$iSSAcoefficients)
   if (ready) {
-    sim <- setupBaseline(sim, objects = c("fixedSSUD", "baselineYear", "pde")[
-      !c(suppliedElsewhere("fixedSSUD", sim), suppliedElsewhere("baselineYear", sim), suppliedElsewhere("pde", sim))
+    sim <- setupBaseline(sim, objects = c("fixedSSUD", "pde")[
+      !c(suppliedElsewhere("fixedSSUD", sim), suppliedElsewhere("pde", sim))
     ])
   }
 
@@ -481,20 +479,23 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
 ## The baseline and forecast setup, made from modelLand and the models: the `objects` named, each
 ## only if not already in sim. Called from .inputObjects() when modelLand and the models are already
 ## there, and from init for anything still missing (e.g. when other modules make them).
-setupBaseline <- function(sim, objects = c("fixedSSUD", "baselineYear", "pde")) {
+setupBaseline <- function(sim, objects = c("fixedSSUD", "pde")) {
+
+  # modelLand supplied as one multi-layer SpatRaster (e.g. YT_caribou's modelLand.tif): the named
+  # list of its layers the module declares, as for the file .inputObjects() downloads
+  if (inherits(sim$modelLand, "SpatRaster")) {
+    sim$modelLand <- setNames(as.list(sim$modelLand), names(sim$modelLand))
+  }
 
   dPath <- asPath(getOption("reproducible.destinationPath", dataPath(sim)), 1)
   modelNames <- pdeModelNames(P(sim)$simulationScale, P(sim)$jurisdiction)
 
-  # forecast setup: the landscape layers that stay fixed, and the year they are from
+  # forecast setup: the landscape layers that stay fixed (those no dynamicLayers pattern matches)
   if (P(sim)$simulationProcess == "dynamic") {
 
     if ("fixedSSUD" %in% objects && is.null(sim$fixedSSUD)) {
-      sim$fixedSSUD <- makeFixedSSUD(sim$modelLand, P(sim)$ecotype)
-    }
-
-    if ("baselineYear" %in% objects && is.null(sim$baselineYear)) {
-      sim$baselineYear <- max(P(sim)$histLandYears)
+      sources <- forecastSources(sim, modelNames)
+      sim$fixedSSUD <- makeFixedSSUD(sim$modelLand, names(sources)[is.na(sources)])
     }
   }
 
@@ -527,6 +528,22 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "baselineYear", "pde")) 
   }
 
   return(invisible(sim))
+}
+
+## The layers the forecast models read (`modelNames`; by default those of the baseline), named by
+## layer, each with the dynamicLayers source that forecasts it, or NA (fixed, from modelLand)
+forecastSources <- function(sim, modelNames = names(sim$pde)) {
+  mods <- pdeModels(modelNames, P(sim)$ecotype, sim$iSSAmodels, sim$iSSAcoefficients)
+  layers <- unique(unlist(lapply(mods, modelLayerNames)))
+  dyn <- P(sim)$dynamicLayers
+  if (is.null(dyn)) dyn <- defaultDynamicLayers(P(sim)$ecotype)
+  layerSources(layers, dyn)
+}
+
+## The forest covariates (e.g. prop_forest) of the layers the forecast builds from LandR
+forecastForestStems <- function(sim) {
+  sources <- forecastSources(sim)
+  unique(parseLayerName(names(sources)[sources %in% "forest"])$stem)
 }
 
 ggplotFn <- function(data, ...) {

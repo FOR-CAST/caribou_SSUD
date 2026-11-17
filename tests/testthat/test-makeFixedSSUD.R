@@ -1,32 +1,25 @@
 testthat::local_edition(3)
 
-## a modelLand as the module keeps it: a list of SpatRasters named by layer
+## a modelLand list with the given layer names, each a 2 x 2 raster
 fixture_land <- function(layers) {
-  r <- fixture_envlayers()$x
-  stats::setNames(lapply(layers, function(n) r), layers)
+  r <- terra::rast(nrows = 2, ncols = 2, xmin = 0, xmax = 2, ymin = 0, ymax = 2, vals = 1:4)
+  setNames(lapply(seq_along(layers), function(i) r + i), layers)
 }
 
-test_that("makeFixedSSUD() takes the fixed layers from modelLand, named as the forecast reads them", {
-  boreal <- makeFixedSSUD(
-    fixture_land(c("prop_veg", "prop_wets", "distpaved", "distunpaved", "distpolys", "timeSinceHarvest",
-                   "prop_needleleaf")),
-    "boreal"
-  )
-  expect_identical(names(boreal),
-                   c("prop_veg", "prop_wets", "distpaved", "distunpaved", "distpolys", "timeSinceHarvest0"))
-
-  nm <- makeFixedSSUD(fixture_land(c("prop_veg_250", "dist_lf_250", "dist_poly_250", "prop_forest_250")),
-                      "northern_mountain")
-  expect_identical(names(nm), c("prop_veg_250", "dist_lf_250", "dist_poly_250"))
+test_that("makeFixedSSUD() takes the named layers from modelLand, under their own names", {
+  fixed <- makeFixedSSUD(fixture_land(c("prop_veg_240", "dist_paved_240_adj", "prop_forest_240")),
+                         c("prop_veg_240", "dist_paved_240_adj"))
+  expect_named(fixed, c("prop_veg_240", "dist_paved_240_adj"))
+  expect_equal(as.vector(terra::values(fixed$dist_paved_240_adj)), 3:6)
 })
 
 test_that("makeFixedSSUD() names the layers modelLand lacks", {
   expect_error(
-    makeFixedSSUD(fixture_land(c("prop_veg", "prop_wets", "distpaved", "distunpaved", "distpolys")), "boreal"),
-    "lacks: timeSinceHarvest"
+    makeFixedSSUD(fixture_land(c("prop_veg_240", "dist_paved_240")), c("prop_veg_240", "prop_veg_1200")),
+    "lacks: prop_veg_1200"
   )
-  expect_error(
-    makeFixedSSUD(fixture_land(c("prop_veg_240", "dist_paved_240")), "northern_mountain"),
-    "lacks: prop_veg_250, dist_lf_250, dist_poly_250"
-  )
+})
+
+test_that("makeFixedSSUD() gives NULL when no layer is fixed", {
+  expect_null(makeFixedSSUD(fixture_land("ts_fire_240"), character()))
 })
