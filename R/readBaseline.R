@@ -19,8 +19,9 @@ baselineDir <- function(source, destinationPath) {
   return(dir)
 }
 
-# a premade baseline, as makePDEs() writes it: `pde_<model>.tif` (and `pdeMap_<model>.tif` if
-# `normalizePDE`) for each model, anywhere in `dir`; returned as makePDEs() returns it
+# a premade baseline, as makePDEs() writes it: `pde_<map>.tif` (and `pdeMap_<map>.tif` if
+# `normalizePDE`) for each map named in `modelNames` (a model's name, or `<model>_<season>`; see
+# pdeMapNames()), anywhere in `dir`; returned as makePDEs() returns it
 readBaseline <- function(dir, modelNames, normalizePDE) {
 
   files <- list.files(dir, pattern = "[.]tif$", recursive = TRUE, full.names = TRUE)

@@ -4,9 +4,11 @@
 #   "prop_forest_240_end:prop_forest_1200_end";
 # - `categorical`: one row per level of a categorical layer, which glmmTMB names as the variable then
 #   the level, e.g. "lc_endopen" (layer "lc", level "open");
-# - `other`: the other parts of these terms, e.g. "seasonwinter" in "seasonwinter:prop_forest_240_end".
-# Movement terms (sl_, ta_) and season terms name no `_end` variable, so are left out. `mod` is as
-# for coef_tab()
+# - `seasons`: the seasons these terms are for, e.g. "winter" from "seasonwinter:prop_forest_240_end"
+#   (the levels of the `season` factor, as glmmTMB names them; see isSeasonPart());
+# - `other`: the other parts of these terms, which are neither layers nor seasons.
+# Movement terms (sl_, ta_) and season terms on their own name no `_end` variable, so are left out.
+# `mod` is as for coef_tab()
 readModelTerms <- function(mod) {
 
   terms <- coef_tab(mod)$term
@@ -14,6 +16,7 @@ readModelTerms <- function(mod) {
 
   layers <- character()
   categorical <- data.frame(layer = character(), level = character())
+  seasons <- character()
   other <- character()
 
   for (p in parts) {
@@ -26,13 +29,16 @@ readModelTerms <- function(mod) {
       # a categorical layer: the variable name up to its first `_end`, then the level
       categorical <- rbind(categorical, data.frame(layer = sub("_end.*$", "", p),
                                                    level = sub("^.*?_end", "", p, perl = TRUE)))
+    } else if (isSeasonPart(p)) {
+      seasons <- c(seasons, sub("^season", "", p))
+
     } else {
       other <- c(other, p)
     }
   }
 
   list(layers = unique(c(layers, categorical$layer)), categorical = unique(categorical),
-       other = unique(other))
+       seasons = unique(seasons), other = unique(other))
 }
 
 # the landscape layers a model reads (see readModelTerms())
@@ -40,8 +46,8 @@ modelLayerNames <- function(mod) {
   readModelTerms(mod)$layers
 }
 
-# stops for what the module cannot predict from yet: a model with seasons (or another variable that
-# is not a landscape layer) in its end-of-step terms, or with a categorical layer; then stops naming
+# stops for what the module cannot predict from yet: a model with a variable that is neither a
+# landscape layer nor a season in its end-of-step terms, or with a categorical layer; then stops naming
 # any layer a model reads that `layerNames` (the landscape's layers) lacks. With `warnCapped`, also
 # warns when a model reads an uncapped distance, X, while the landscape has its capped copy, X_adj:
 # the model may have been fit on capped values under the plain name
@@ -52,7 +58,7 @@ checkModelLayers <- function(mods, layerNames, warnCapped = FALSE) {
 
     if (length(terms$other)) {
       stop("The '", mn, "' model's landscape terms also hold ", paste(terms$other, collapse = ", "),
-           ", which are not landscape layers (e.g. seasons). Models with seasons are not supported yet.",
+           ", which are neither landscape layers nor seasons (`season<name>`), so cannot be predicted.",
            call. = FALSE)
     }
 

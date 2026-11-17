@@ -112,6 +112,22 @@ defineModule(sim, list(
                            " part of studyAreaReporting inside the model's region). Only the choice for",
                            " the models run (simulationScale) is used. The 'Reporting' choices need",
                            " studyAreaReporting.")),
+    defineParameter("seasonMaps", "character", NULL, NA, NA,
+                    paste0("For a model with seasons (terms such as `seasonwinter:prop_forest_240_end`):",
+                           " the seasons that each get a map of their own, named `<model>_<season>` (e.g.",
+                           " global_winter, written as pde_global_winter.tif). A season's map uses the",
+                           " terms without a season and that season's terms. NULL = all the model's",
+                           " seasons; character(0) = none. Models without seasons ignore it.")),
+    defineParameter("fullYear", "character", NULL, NA, NA,
+                    paste0("For a model with seasons: the seasons combined into one full-year map,",
+                           " named as the model (e.g. global, written as pde_global.tif): the seasons'",
+                           " PDEs, weighted by seasonWeights, so it still sums to 1. NULL = all the",
+                           " model's seasons; character(0) = no full-year map. Needs normalizePDE.",
+                           " Models without seasons ignore it.")),
+    defineParameter("seasonWeights", c("character", "numeric"), "length", NA, NA,
+                    paste0("How the seasons in fullYear are weighted: 'length' = by days per season,",
+                           " from iSSAseasons; 'equal'; or numbers named by season (e.g. c(winter = 2,",
+                           " summer = 1)), scaled to sum to 1.")),
     defineParameter("normalizePDE", "logical", TRUE,
                     desc = "Whether to normalize PDE inside SSUD (FALSE for tmux workflow)"),
     defineParameter("jurisdiction", "character",c("BC","SK","MB", "ON", "NTYT", "NT"),
@@ -156,6 +172,13 @@ defineModule(sim, list(
                               '`<model>_fixed.csv`, are ignored). If not supplied, it is taken from',
                               '`iSSAmodels` when that is supplied, else read from `<coefficientsModel>_fixed.csv`',
                               'in `NMC_model_<coefficientsModel>.zip` in `modelsFolderID`.')),
+    expectsInput(objectName = 'iSSAseasons', objectClass = 'data.table',
+                 desc = paste('For a model with seasons and seasonWeights \'length\': the model\'s season',
+                              'table, one row per season, with columns `season` (as in the terms, e.g.',
+                              '`winter` for `seasonwinter`) and `days` (days per season), as hsaCEtool\'s',
+                              '`<model>_seasons.csv` gives it. If not supplied, read from',
+                              '`<coefficientsModel>_seasons.csv` in the model\'s zip, when it has one (models',
+                              'fit before hsaCEtool wrote this table do not).')),
     expectsInput("cohortData", "data.table",
                  desc = paste("`data.table` with cohort-level information on age and biomass, by `pixelGroup` and ecolocation",
                               "(i.e., `ecoregionGroup`). If supplied, it must have the following columns: `pixelGroup` (integer),",
@@ -203,8 +226,9 @@ defineModule(sim, list(
                               "regional models. Not needed when simulationScale is 'global'.")),
     expectsInput(objectName = "pde", objectClass = "list",
                  desc = paste("Baseline PDE (raw utility if normalizePDE is FALSE): a named list with one",
-                              "SpatRaster per model ('global' and/or a region). If not supplied, read from",
-                              "baselineSource, else made from modelLand.")),
+                              "SpatRaster per model ('global' and/or a region), or for a model with seasons,",
+                              "per season map and the full-year map (see seasonMaps, fullYear). If not",
+                              "supplied, read from baselineSource, else made from modelLand.")),
     expectsInput(objectName = "pdeMap", objectClass = "list",
                  desc = "Baseline binned PDE maps, named as `pde`; NULL if normalizePDE is FALSE."),
     expectsInput(objectName = "fixedSSUD", objectClass = "SpatRaster",
@@ -218,11 +242,11 @@ defineModule(sim, list(
     createsOutput(objectName = "forestBaseline", objectClass = "list",
                   desc = "Dynamic mode: LandR's forest at the start of the simulation (see inputs)"),
     createsOutput(objectName = 'pde', objectClass = 'list',
-                  desc = 'Current (pre simulation) Raw pde calculation, one SpatRaster per model'),
+                  desc = 'Current (pre simulation) Raw pde calculation, one SpatRaster per map (see the input `pde`)'),
     createsOutput(objectName = 'pdeMap', objectClass = 'list',
-                  desc = 'Current (pre simulation) binned map of pde UD for intensity of selection, one SpatRaster per model'),
+                  desc = 'Current (pre simulation) binned map of pde UD for intensity of selection, one SpatRaster per map'),
     createsOutput(objectName = 'simPde', objectClass = 'list',
-                  desc = 'Raw pde calculation from sim layers, by year, then one SpatRaster per model'),
+                  desc = 'Raw pde calculation from sim layers, by year, then one SpatRaster per map, as `pde`'),
     createsOutput(objectName = 'simPdeMap', objectClass = 'list',
                   desc = 'Forcast (simulated) binned map of pde UD for intensity of selection by year')
 
@@ -333,12 +357,14 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
       outDir <- reproducible::checkPath(file.path(outputPath(sim), paste0('pde_', P(sim)$.studyAreaName), 'sims'), create = T)
 
 
-      # forecast the same models as the baseline
-      mods <- pdeModels(names(sim$pde), P(sim)$ecotype, sim$iSSAmodels, sim$iSSAcoefficients)
+      # forecast the same models, and maps, as the baseline
+      mods <- pdeModels(pdeModelNames(P(sim)$simulationScale, P(sim)$jurisdiction), P(sim)$ecotype,
+                        sim$iSSAmodels, sim$iSSAcoefficients)
       ud <- makePDEs(mods = mods, envLayers = sim$simEnv[[key]], studyAreaCaribou = sim$studyAreaCaribou,
                      studyArea_juris = sim$studyArea_juris, normalizePDE = P(sim)$normalizePDE,
                      savePath = outDir, key = key, studyAreaReporting = sim$studyAreaReporting,
-                     pdeArea = P(sim)$pdeArea)
+                     pdeArea = P(sim)$pdeArea, seasonMaps = P(sim)$seasonMaps, fullYear = P(sim)$fullYear,
+                     seasonWeights = P(sim)$seasonWeights, seasonTable = sim$iSSAseasons)
       sim$simPde[[key]] <- ud$pde
       sim$simPdeMap[[key]] <- ud$pdeMap
       sim <- registerPdeFiles(sim, ud$files, objectNames = c(pde = "simPde", pdeMap = "simPdeMap"))
@@ -448,6 +474,11 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
       )
 
       sim$iSSAcoefficients <- coef_tab(coefficients)
+
+      # the model's season table, if its zip has one
+      if (!suppliedElsewhere("iSSAseasons", sim)) {
+        sim$iSSAseasons <- readZipSeasons(file.path(dPath, modelZip), P(sim)$coefficientsModel)
+      }
     }
   }
 
@@ -482,6 +513,7 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "pde")) {
 
   dPath <- asPath(getOption("reproducible.destinationPath", dataPath(sim)), 1)
   modelNames <- pdeModelNames(P(sim)$simulationScale, P(sim)$jurisdiction)
+  mods <- pdeModels(modelNames, P(sim)$ecotype, sim$iSSAmodels, sim$iSSAcoefficients)
 
   # forecast setup: the landscape layers that stay fixed (those no dynamicLayers pattern matches)
   if (P(sim)$simulationProcess == "dynamic") {
@@ -497,7 +529,9 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "pde")) {
 
     if (!is.na(P(sim)$baselineSource)) {
       message("Reading the premade baseline from ", P(sim)$baselineSource)
-      ud <- readBaseline(baselineDir(P(sim)$baselineSource, dPath), modelNames, P(sim)$normalizePDE)
+      # one map per model, or for a model with seasons, per season and the full year
+      mapNames <- pdeMapNames(mods, P(sim)$seasonMaps, P(sim)$fullYear)
+      ud <- readBaseline(baselineDir(P(sim)$baselineSource, dPath), mapNames, P(sim)$normalizePDE)
 
     } else {
       message("Building baseline PDEs for: ", paste(modelNames, collapse = ", "))
@@ -505,7 +539,6 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "pde")) {
       envlayers <- list2env(setNames(lapply(names(sim$modelLand), function(n) sim$modelLand[[n]]), names(sim$modelLand)),
                             parent = baseenv())
 
-      mods <- pdeModels(modelNames, P(sim)$ecotype, sim$iSSAmodels, sim$iSSAcoefficients)
       # stops naming any layer the models read that modelLand lacks; warns if one may need `_adj`
       checkModelLayers(mods, names(sim$modelLand), warnCapped = TRUE)
 
@@ -513,7 +546,9 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "pde")) {
       ud <- makePDEs(mods = mods,
                      envLayers = envlayers, studyAreaCaribou = sim$studyAreaCaribou,
                      studyArea_juris = sim$studyArea_juris, normalizePDE = P(sim)$normalizePDE,
-                     studyAreaReporting = sim$studyAreaReporting, pdeArea = P(sim)$pdeArea)
+                     studyAreaReporting = sim$studyAreaReporting, pdeArea = P(sim)$pdeArea,
+                     seasonMaps = P(sim)$seasonMaps, fullYear = P(sim)$fullYear,
+                     seasonWeights = P(sim)$seasonWeights, seasonTable = sim$iSSAseasons)
     }
 
     sim$pde <- ud$pde
@@ -523,9 +558,9 @@ setupBaseline <- function(sim, objects = c("fixedSSUD", "pde")) {
   return(invisible(sim))
 }
 
-## The layers the forecast models read (`modelNames`; by default those of the baseline), named by
-## layer, each with the dynamicLayers source that forecasts it, or NA (fixed, from modelLand)
-forecastSources <- function(sim, modelNames = names(sim$pde)) {
+## The layers the forecast models read (`modelNames`; by default the models run), named by layer,
+## each with the dynamicLayers source that forecasts it, or NA (fixed, from modelLand)
+forecastSources <- function(sim, modelNames = pdeModelNames(P(sim)$simulationScale, P(sim)$jurisdiction)) {
   mods <- pdeModels(modelNames, P(sim)$ecotype, sim$iSSAmodels, sim$iSSAcoefficients)
   layers <- unique(unlist(lapply(mods, modelLayerNames)))
   dyn <- P(sim)$dynamicLayers
