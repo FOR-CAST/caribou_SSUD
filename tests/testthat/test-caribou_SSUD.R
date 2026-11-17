@@ -47,10 +47,10 @@ local_prepInputs_mock <- function(mock, env = parent.frame()) {
   )
 }
 
-run_simInit <- function(paths, objects, params = list(), ...) {
+run_simInit <- function(paths, objects, params = list(), ..., times = list(start = 2025, end = 2025)) {
   suppressMessages(SpaDES.core::simInit(
     ...,
-    times = list(start = 2025, end = 2025),
+    times = times,
     params = list(caribou_SSUD = utils::modifyList(
       list(ecotype = "northern_mountain", .studyAreaName = "test", .useCache = FALSE), params
     )),
@@ -173,14 +173,64 @@ test_that("simInit() reads a premade baseline from a URL in baselineSource, and 
   expect_false(dir.exists(file.path(paths$other, "pde_test")))
 })
 
-test_that("in dynamic mode, simInit() names the fixed layers modelLand lacks", {
+## a dynamic northern mountain run's inputs on a 240 m grid of 10 x 10 cells: a model reading forest,
+## fire and vegetation layers; LandR's stands (one conifer stand everywhere but the first cell) and
+## scfm's time since fire (cell 2 burned 2 years before)
+dyn_objects <- function() {
+  g <- terra::rast(nrows = 10, ncols = 10, xmin = 0, xmax = 2400, ymin = 0, ymax = 2400, crs = "EPSG:3154")
+  ts <- terra::rast(g, vals = NA_real_)
+  ts[1] <- 10
+  pgm <- terra::rast(g, vals = 1L)
+  pgm[1] <- NA
+  tsf <- terra::rast(g, vals = NA_real_)
+  tsf[2] <- 2
+  list(
+    iSSAcoefficients = data.table::data.table(term = c("prop_forest_240_end", "ts_fire_240_end", "prop_veg_240_end"),
+                                              estimate = c(1, -0.01, 0.5)),
+    modelLand = list(prop_forest_240 = terra::rast(g, vals = 0.5), ts_fire_240 = ts,
+                     prop_veg_240 = terra::rast(g, vals = 0.3)),
+    studyAreaCaribou = terra::as.polygons(terra::ext(g), crs = terra::crs(g)),
+    rasterToMatch = g,
+    cohortData = data.table::data.table(pixelGroup = 1L, speciesCode = "Pice_mar", B = 100L, age = 50L),
+    pixelGroupMap = pgm,
+    sppEquiv = data.table::data.table(LandR = c("Pice_mar", "Popu_tre"), Type = c("Conifer", "Deciduous")),
+    timeSinceFire = tsf
+  )
+}
+
+test_that("in dynamic mode, simInit() keeps fixed the layers no dynamicLayers pattern matches", {
   skip_if_not_installed("SpaDES.core")
   paths <- local_spades_sandbox()
 
-  expect_error(
-    run_simInit(paths, nm_objects(), params = list(simulationProcess = "dynamic")),
-    "prop_veg_250, dist_lf_250, dist_poly_250"
-  )
+  sim <- run_simInit(paths, dyn_objects(), params = list(simulationProcess = "dynamic"))
+  expect_named(sim$fixedSSUD, "prop_veg_240")
+
+  sim <- run_simInit(paths, dyn_objects(), params = list(simulationProcess = "dynamic", dynamicLayers = list()))
+  expect_named(sim$fixedSSUD, c("prop_forest_240", "ts_fire_240", "prop_veg_240"))
+})
+
+test_that("a dynamic run forecasts the forest and fire layers from LandR and scfm", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+
+  sim <- suppressMessages(SpaDES.core::spades(
+    run_simInit(paths, dyn_objects(), params = list(simulationProcess = "dynamic", predictStartYear = 2030,
+                                                    predictionInterval = 5),
+                times = list(start = 2025, end = 2030)),
+    debug = FALSE
+  ))
+  expect_named(sim$forestBaseline, "prop_forest")
+  expect_named(sim$simPde, "year2030")
+  expect_named(sim$simPde$year2030, "global")
+
+  land <- terra::rast(file.path(paths$other, "pde_test", "sims", "pdeLayers_test_year2030.tif"))
+  expect_named(land, c("prop_forest_240", "ts_fire_240", "prop_veg_240"))
+  ## no change in LandR's stands since the start: modelLand's forest share
+  expect_equal(land$prop_forest_240[1][[1]], 0.5)
+  ## burned in 2015 (modelLand), 2028 (scfm), never
+  expect_equal(unlist(land$ts_fire_240[1:3]), c(15, 2, 200), ignore_attr = TRUE)
+  ## the file holds 32-bit floats
+  expect_equal(land$prop_veg_240[1][[1]], 0.3, tolerance = 1e-6)
 })
 
 test_that("a static run makes only the baseline, and schedules no forecast", {
