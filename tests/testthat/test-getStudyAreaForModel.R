@@ -36,3 +36,42 @@ test_that("getStudyAreaForModel() gives the global model studyAreaCaribou", {
   expect_identical(getStudyAreaForModel("GLOBAL", areas, "the caribou area"), "the caribou area")
   expect_error(getStudyAreaForModel("global", areas, NULL), "needs studyAreaCaribou")
 })
+
+test_that("getStudyAreaForModel() gives the global model studyAreaReporting with pdeArea 'fullReportingArea'", {
+  rep <- fixture_area(xmax = 1)
+  juris <- list(BC = fixture_area(xmin = 1))
+  areas <- c("fullReportingArea", "regionalArea")
+
+  expect_equal(as.vector(terra::ext(getStudyAreaForModel("global", juris, fixture_area(), rep, areas))),
+               as.vector(terra::ext(rep)))
+  # a regional model keeps its region
+  expect_equal(as.vector(terra::ext(getStudyAreaForModel("BC", juris, fixture_area(), rep, areas))),
+               as.vector(terra::ext(juris$BC)))
+  # an sf area is taken too
+  expect_s4_class(getStudyAreaForModel("global", juris, fixture_area(), sf::st_as_sf(rep), areas), "SpatVector")
+})
+
+test_that("getStudyAreaForModel() gives a regional model the part of studyAreaReporting in its region with 'regionalReportingArea'", {
+  rep <- fixture_area(xmin = 1)
+  juris <- list(BC = fixture_area(ymax = 1))
+  areas <- c("fullArea", "regionalReportingArea")
+
+  expect_equal(as.vector(terra::ext(getStudyAreaForModel("BC", juris, fixture_area(), rep, areas))),
+               c(xmin = 1, xmax = 2, ymin = 0, ymax = 1))
+  # the global model keeps studyAreaCaribou
+  expect_equal(as.vector(terra::ext(getStudyAreaForModel("global", juris, fixture_area(), rep, areas))),
+               c(xmin = 0, xmax = 2, ymin = 0, ymax = 2))
+  expect_error(getStudyAreaForModel("BC", list(BC = fixture_area(xmax = 1)), NULL, fixture_area(xmin = 1.5), areas),
+               "does not overlap")
+})
+
+test_that("checkPdeArea() wants one known choice for each scale run, and studyAreaReporting for a 'Reporting' one", {
+  expect_true(checkPdeArea(c("fullArea", "regionalArea"), c("global", "BC"), FALSE))
+  expect_true(checkPdeArea("fullArea", "global", FALSE))
+  expect_error(checkPdeArea("fullArea", c("global", "BC"), FALSE), "'regionalArea' or 'regionalReportingArea' for the regional models")
+  expect_error(checkPdeArea(c("fullArea", "fullReportingArea"), "global", TRUE), "one of 'fullArea' or 'fullReportingArea'")
+  expect_error(checkPdeArea("herd", "global", FALSE), "not: herd")
+  expect_error(checkPdeArea("fullReportingArea", "global", FALSE), "needs studyAreaReporting")
+  # a choice for a scale not run is not used, so needs nothing
+  expect_true(checkPdeArea(c("fullArea", "regionalReportingArea"), "global", FALSE))
+})

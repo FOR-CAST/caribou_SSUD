@@ -72,7 +72,10 @@ test_that("the module's metadata parses, with the inputs .inputObjects() fetches
 
   md <- SpaDES.core::moduleMetadata(module = "caribou_SSUD", path = paths$modulePath)
   expect_contains(md$inputObjects$objectName, c("iSSAmodels", "modelLand"))
-  expect_contains(md$parameters$paramName, c("ecotype", "outputFolderID", "normalizePDE"))
+  expect_contains(md$parameters$paramName, c("ecotype", "outputFolderID", "normalizePDE", "pdeArea"))
+  expect_contains(md$inputObjects$objectName, c("rasterToMatch", "studyAreaReporting"))
+  expect_false("rasterToMatch_SSUD" %in% md$inputObjects$objectName)
+  expect_equal(md$parameters$default[[which(md$parameters$paramName == "ts_else")]], 200)
 })
 
 test_that("simInit() takes supplied inputs as they are and downloads nothing", {
@@ -192,6 +195,32 @@ test_that("a static run makes only the baseline, and schedules no forecast", {
   expect_identical(setdiff(done[moduleName == "caribou_SSUD", eventType], ".inputObjects"), "init")
   expect_named(sim$pde, "global")
   expect_null(sim$simPde)
+})
+
+test_that("simInit() stops when pdeArea needs studyAreaReporting and none is supplied", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+
+  expect_error(run_simInit(paths, nm_objects(), params = list(pdeArea = "fullReportingArea")),
+               "needs studyAreaReporting")
+})
+
+test_that("simInit() makes the baseline over the area pdeArea picks", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+
+  sim <- run_simInit(paths, c(nm_objects(), list(studyAreaReporting = fixture_area(xmin = 1))),
+                     params = list(pdeArea = "fullReportingArea"))
+  expect_equal(as.vector(is.na(terra::values(sim$pde$global))), c(TRUE, FALSE, TRUE, FALSE))
+})
+
+test_that("a static run stops naming a layer the model reads that modelLand lacks", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+  objs <- nm_objects()
+  objs$modelLand$y <- NULL
+
+  expect_error(run_simInit(paths, objs), "'global'.*: y$")
 })
 
 test_that("a static run registers the baseline files it wrote as saved outputs, even with simInit() outputs", {

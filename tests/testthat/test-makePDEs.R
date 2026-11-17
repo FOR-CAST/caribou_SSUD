@@ -50,6 +50,23 @@ test_that("makePDEs() writes each model's PDE and map as one GeoTIFF each, with 
   }
 })
 
+test_that("makePDEs() stops naming a layer a model reads that the landscape lacks", {
+  coefs <- data.table::data.table(term = c("x_end", "z_end"), estimate = c(0.5, 1))
+  expect_error(
+    makePDEs(mods = list(global = coefs), envLayers = fixture_envlayers(), studyAreaCaribou = fixture_area()),
+    "'global'.*: z$"
+  )
+})
+
+test_that("makePDEs() normalizes each PDE within the area pdeArea picks", {
+  coefs <- fixture_coefs()
+  ud <- makePDEs(mods = list(global = coefs), envLayers = fixture_envlayers(), studyAreaCaribou = fixture_area(),
+                 studyAreaReporting = fixture_area(xmin = 1), pdeArea = "fullReportingArea")
+
+  expect_equal(as.vector(is.na(terra::values(ud$pde$global))), c(TRUE, FALSE, TRUE, FALSE))
+  expect_equal(terra::global(ud$pde$global, "sum", na.rm = TRUE)[[1]], 1)
+})
+
 test_that("makePDEs() returns the paths it wrote, by model, and none without savePath", {
   coefs <- fixture_coefs()
   dir <- withr::local_tempdir()
