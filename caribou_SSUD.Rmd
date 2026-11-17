@@ -1,15 +1,11 @@
 ---
 title: "caribou_SSUD Manual"
-subtitle: "v.`r SpaDES.core::moduleMetadata(module = 'caribou_SSUD', path = '..')$version`"
-date: "Last updated: `r Sys.Date()`"
+date: "Version `r SpaDES.core::moduleMetadata(module = 'caribou_SSUD', path = '..')$version`, last updated: `r Sys.Date()`"
 output:
-  bookdown::html_document2:
+  bookdown::github_document2:
     toc: true
-    toc_float: true
-    theme: sandstone
     number_sections: false
-    df_print: paged
-    keep_md: yes
+    html_preview: false
 editor_options:
   chunk_output_type: console
   bibliography: citations/references_caribou_SSUD.bib
@@ -24,15 +20,9 @@ always_allow_html: true
 
 ```{r setup-caribou-SSUD, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, eval = FALSE, results = "hold") ## change to eval = TRUE if all chunks are to be evaluated
-
-dir.create("figures", showWarnings = FALSE)
-
-download.file(url = "https://img.shields.io/badge/Made%20with-Markdown-1f425f.png",
-              destfile = "figures/markdownBadge.png",
-              mode = 'wb')
 ```
 
-[![made-with-Markdown](figures/markdownBadge.png)](https://commonmark.org)
+[![made-with-Markdown](https://img.shields.io/badge/Made%20with-Markdown-1f425f.png)](https://commonmark.org)
 
 <!-- if knitting to pdf remember to add the pandoc_args: ["--extract-media", "."] option to yml in order to get the badge images -->
 
@@ -59,8 +49,7 @@ Table \@ref(tab:moduleInputs-caribou-SSUD) shows the full list of module inputs.
 ```{r moduleInputs-caribou-SSUD, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE}
 df_inputs <- SpaDES.core::moduleInputs("caribou_SSUD", "..")
 knitr::kable(df_inputs,
-             caption = "List of (ref:caribou-SSUD) input objects and their description.") |>
-  kableExtra::kable_styling(latex_options = "scale_down", full_width = TRUE)
+             caption = "List of (ref:caribou-SSUD) input objects and their description.")
 ```
 
 Provide a summary of user-visible parameters (Table \@ref(tab:moduleParams-caribou-SSUD))
@@ -68,8 +57,7 @@ Provide a summary of user-visible parameters (Table \@ref(tab:moduleParams-carib
 
 ```{r moduleParams-caribou-SSUD, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE}
 df_params <- SpaDES.core::moduleParams("caribou_SSUD", "..")
-knitr::kable(df_params, caption = "List of (ref:caribou-SSUD) parameters and their description.") |>
-  kableExtra::kable_styling(latex_options = "scale_down", full_width = TRUE)
+knitr::kable(df_params, caption = "List of (ref:caribou-SSUD) parameters and their description.")
 ```
 
 ### Events
@@ -90,8 +78,7 @@ Description of the module outputs (Table \@ref(tab:moduleOutputs-caribou-SSUD)).
 
 ```{r moduleOutputs-caribou-SSUD, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE}
 df_outputs <- SpaDES.core::moduleOutputs("caribou_SSUD", "..")
-knitr::kable(df_outputs, caption = "List of (ref:caribou-SSUD) outputs and their description.") |>
-  kableExtra::kable_styling(latex_options = "scale_down", full_width = TRUE)
+knitr::kable(df_outputs, caption = "List of (ref:caribou-SSUD) outputs and their description.")
 ```
 
 ### Links to other modules
