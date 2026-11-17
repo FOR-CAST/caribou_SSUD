@@ -2973,7 +2973,7 @@ border-radius: 0px;
 
 <h1 class="title toc-ignore">caribou_SSUD Manual</h1>
 <h3 class="subtitle">v.0.0.0.9001</h3>
-<h4 class="date">Last updated: 2026-11-16</h4>
+<h4 class="date">Last updated: 2026-11-17</h4>
 
 </div>
 
@@ -3101,7 +3101,7 @@ modelLand
 list
 </td>
 <td style="text-align:left;">
-A list of rasters aligned with the model outputs to be used in UD modules
+The landscape layers the models read: a named list of SpatRasters on one grid, each named as in the model’s terms without <code>_end</code> (e.g. <code>prop_forest_240</code> for the term <code>prop_forest_240_end</code>). The layers needed are read from the terms, and a missing one stops the run, naming it. Capped distances carry <code>_adj</code> (e.g. <code>dist_paved_240_adj</code>). If not supplied, <code>modelLand.tif</code> is downloaded from outputFolderID.
 </td>
 <td style="text-align:left;">
 NA
@@ -3115,7 +3115,7 @@ studyAreaCaribou
 SpatVector
 </td>
 <td style="text-align:left;">
-a single polygon derived from the full extent of caribou locations used for the global model
+The area of the global model: a polygon of the full extent of the caribou locations it was fit on. If not supplied, studyArea is used.
 </td>
 <td style="text-align:left;">
 NA
@@ -3123,13 +3123,27 @@ NA
 </tr>
 <tr>
 <td style="text-align:left;">
-rasterToMatch_SSUD
+studyAreaReporting
 </td>
 <td style="text-align:left;">
-spatRaster
+SpatVector
 </td>
 <td style="text-align:left;">
-Raster to match for SSUD
+Optional: the area the results are reported for (e.g. a range buffer clipped to a jurisdiction), a SpatVector or sf polygon. Used only when pdeArea is ‘fullReportingArea’ or ‘regionalReportingArea’.
+</td>
+<td style="text-align:left;">
+NA
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+rasterToMatch
+</td>
+<td style="text-align:left;">
+SpatRaster
+</td>
+<td style="text-align:left;">
+Dynamic mode: the simulation’s grid, e.g. the one LandR and scfm use. The forecast layers are built on it, and every modelLand layer must be on it (same extent, rows and columns, cell size and coordinate system), or the run stops. If not supplied, modelLand’s grid is used.
 </td>
 <td style="text-align:left;">
 NA
@@ -3246,7 +3260,7 @@ ts_else
 integer
 </td>
 <td style="text-align:left;">
-100
+200
 </td>
 <td style="text-align:left;">
 NA
@@ -3255,7 +3269,7 @@ NA
 NA
 </td>
 <td style="text-align:left;">
-This is the value to fill in NAs in time since disturbance layersThis parameter would need to be updated if want a different default year.
+Years since disturbance given to cells with no recorded disturbance (e.g. never burned) in the time-since-fire and time-since-harvest layers. Use the value the model was fit with (hsaCEtool’s <code>ts_nodata</code>; 200 for the northern mountain models).
 </td>
 <td style="text-align:left;">
 TRUE
@@ -3417,6 +3431,29 @@ NA
 </td>
 <td style="text-align:left;">
 A premade baseline, used when <code>pde</code> is not supplied: a folder, a .zip file, or a URL (e.g. of a .zip on Google Drive) holding <code>pde_&amp;lt;model&amp;gt;.tif</code> (and <code>pdeMap_&amp;lt;model&amp;gt;.tif</code> if normalizePDE) for each model, as this module writes them. If NA, the baseline is made from modelLand and saved to outputPath.
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+pdeArea
+</td>
+<td style="text-align:left;">
+character
+</td>
+<td style="text-align:left;">
+fullArea….
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:left;">
+The area each PDE is predicted, normalized (summed to 1) and binned into its map over, so a map compares cells within that area. One choice for the global model: ‘fullArea’ (studyAreaCaribou, the area the global model was fit on) or ‘fullReportingArea’ (studyAreaReporting, which may reach beyond the fitted area); and one for the regional models: ‘regionalArea’ (the model’s region in studyArea_juris) or ‘regionalReportingArea’ (the part of studyAreaReporting inside the model’s region). Only the choice for the models run (simulationScale) is used. The ‘Reporting’ choices need studyAreaReporting.
 </td>
 <td style="text-align:left;">
 TRUE
