@@ -20,6 +20,7 @@
   - New parameter `baselineYear` (default 2025): the year `modelLand` describes, which time-since layers count from. It replaces the input `baselineYear` and the parameter `histLandYears`.
   - The module no longer writes `timeSinceFire`, which it used to fill from `modelLand` (overwriting scfm's).
 - The PDE maps the module writes are registered as saved outputs (`outputs(sim)`): the baseline's as `pde` and `pdeMap`, and each forecast year's as `simPde` and `simPdeMap`. A baseline the module makes is saved in `init`, not in `.inputObjects()`, so it is saved to the run's `outputPath` and registered with caching on or off (a cache hit for `.inputObjects()` does not run it), and `simInit()`'s `outputs` argument does not drop it. `makePDEs()` also returns the paths it wrote, as `files`; `writePDEs()` writes PDEs already made.
+- `modelLand` may also be supplied as one multi-layer SpatRaster (e.g. a `modelLand.tif`); the module makes it into the named list of its layers. Dynamic mode used to stop on it in the first forecast year.
 
 # caribou_SSUD 0.0.1 (21 February 2025)
 

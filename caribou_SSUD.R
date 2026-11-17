@@ -181,7 +181,8 @@ defineModule(sim, list(
                               "cohortData and pixelGroupMap.")),
     expectsInput(objectName = "modelLand", objectClass = "list",
                   desc = paste("The landscape layers the models read: a named list of SpatRasters on one",
-                               "grid, each named as in the model's terms without `_end` (e.g.",
+                               "grid (or one multi-layer SpatRaster, made into that list), each named as",
+                               "in the model's terms without `_end` (e.g.",
                                "`prop_forest_240` for the term `prop_forest_240_end`). The layers needed",
                                "are read from the terms, and a missing one stops the run, naming it.",
                                "Capped distances carry `_adj` (e.g. `dist_paved_240_adj`). If not",
@@ -479,6 +480,12 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
 ## only if not already in sim. Called from .inputObjects() when modelLand and the models are already
 ## there, and from init for anything still missing (e.g. when other modules make them).
 setupBaseline <- function(sim, objects = c("fixedSSUD", "pde")) {
+
+  # modelLand supplied as one multi-layer SpatRaster (e.g. YT_caribou's modelLand.tif): the named
+  # list of its layers the module declares, as for the file .inputObjects() downloads
+  if (inherits(sim$modelLand, "SpatRaster")) {
+    sim$modelLand <- setNames(as.list(sim$modelLand), names(sim$modelLand))
+  }
 
   dPath <- asPath(getOption("reproducible.destinationPath", dataPath(sim)), 1)
   modelNames <- pdeModelNames(P(sim)$simulationScale, P(sim)$jurisdiction)
