@@ -42,10 +42,10 @@ layerSources <- function(layers, dynamicLayers) {
 }
 
 # a grid-cell map at the resolution `res` (m): unchanged if `res` is NA or the grid's own; otherwise
-# the mean (na.rm) of the grid cells in each res x res block, copied back onto every cell of the
-# block. Blocks start at the coordinate origin, as modelLand's coarse layers do (hsaCEtool), so the
+# `fun` (na.rm; default the mean) of the grid cells in each res x res block, copied back onto every
+# cell of the block. Blocks start at the coordinate origin, as modelLand's coarse layers do (hsaCEtool), so the
 # grid's xmin and ymax must be multiples of `res`
-toResolution <- function(x, res) {
+toResolution <- function(x, res, fun = "mean") {
   cell <- terra::res(x)[1]
   if (is.na(res) || isTRUE(all.equal(res, cell))) return(x)
 
@@ -60,7 +60,7 @@ toResolution <- function(x, res) {
          " m, so its ", res, " m blocks would not line up with modelLand's", call. = FALSE)
 
   k <- round(k)
-  coarse <- terra::aggregate(x, fact = k, fun = "mean", na.rm = TRUE)
+  coarse <- terra::aggregate(x, fact = k, fun = fun, na.rm = TRUE)
   fine <- terra::disagg(coarse, fact = k)
   terra::crop(fine, x, extend = TRUE)
 }
@@ -129,9 +129,14 @@ forestLayer <- function(name, nowCells, startCells, modelLand, windowRadius = li
 # year comes from modelLand's layer of the same covariate on the grid (`baseLayer`; the event year is
 # baselineYear minus its value; NA, or `tsElse` or more, = no event), replaced by the year from
 # `simTimeSince` (e.g. scfm's timeSinceFire: years since an event in the simulation, NA = none) where
-# that is more recent. Coarser layers take the mean of the grid cells' event years (na.rm). Then
-# years since = year - event year; NA (no event) = `tsElse`
-timeSinceLayers <- function(names, baseLayer, year, baselineYear, tsElse, simTimeSince = NULL) {
+# that is more recent. Coarser layers take, of the grid cells' event years (na.rm), the most recent
+# (`coarse` "recent") or the mean ("mean"). Then years since = year - event year; NA (no event) =
+# `tsElse`
+timeSinceLayers <- function(names, baseLayer, year, baselineYear, tsElse, simTimeSince = NULL,
+                            coarse = "recent") {
+  fun <- switch(coarse, recent = "max", mean = "mean",
+                stop("fireCoarse must be 'recent' or 'mean'", call. = FALSE))
+
   eventYear <- baselineYear - baseLayer
   eventYear <- terra::ifel(baseLayer >= tsElse, NA, eventYear)
 
@@ -142,7 +147,7 @@ timeSinceLayers <- function(names, baseLayer, year, baselineYear, tsElse, simTim
   }
 
   out <- lapply(names, function(n) {
-    ts <- year - toResolution(eventYear, parseLayerName(n)$res)
+    ts <- year - toResolution(eventYear, parseLayerName(n)$res, fun)
     ts <- terra::ifel(is.na(ts), tsElse, ts)
     names(ts) <- n
     ts
@@ -207,7 +212,8 @@ buildForecastLayers <- function(layers, sources, year, modelLand, grid, objs, p)
     for (stem in unique(info$stem[info$layer %in% these])) {
       ns <- these[info$stem[match(these, info$layer)] == stem]
       out[ns] <- as.list(timeSinceLayers(ns, timeSinceBase(stem, modelLand, cellSize), year,
-                                         p$baselineYear, p$ts_else, simTs))
+                                         p$baselineYear, p$ts_else, simTs,
+                                         if (is.null(p$fireCoarse)) "recent" else p$fireCoarse))
     }
   }
 

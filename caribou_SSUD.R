@@ -44,6 +44,13 @@ defineModule(sim, list(
                            " 240 m layer (e.g. prop_forest_240) is the mean of the 240 m cells within",
                            " 500 m. A resolution not listed gets no circle (e.g. prop_forest_1200 is the",
                            " mean of the 240 m cells in each 1200 m block). Fire layers get no circle.")),
+    defineParameter("fireCoarse", "character", "recent", NA, NA,
+                    paste0("Dynamic mode: how a fire layer coarser than the grid (e.g. ts_fire_1200 on",
+                           " a 240 m grid) is built from the grid cells' fire years (unburned cells left",
+                           " out): 'recent' = the most recent fire in the block, as modelLand's layers and",
+                           " the current northern mountain models (full_to2020) were made; 'mean' = the",
+                           " mean fire year, as hsaCEtool will make them. Use the rule the model was fit",
+                           " with. TODO: default to 'mean' once the models are refit.")),
     defineParameter("forestMinBiomass", "numeric", 0, 0, NA,
                     paste0("Dynamic mode: a LandR cell is forest when its stand has more than this",
                            " much tree biomass (g/m2, LandR's unit for B); 0 = any tree biomass.")),
@@ -342,6 +349,9 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
 
   if (length(P(sim)$ecotype) != 1 || !P(sim)$ecotype %in% c("boreal", "northern_mountain")) {
     stop("ecotype must be one of 'boreal' or 'northern_mountain'")
+  }
+  if (length(P(sim)$fireCoarse) != 1 || !P(sim)$fireCoarse %in% c("recent", "mean")) {
+    stop("fireCoarse must be one of 'recent' or 'mean'")
   }
   if (length(P(sim)$forestForecast) != 1 || !P(sim)$forestForecast %in% c("change", "LandR")) {
     stop("forestForecast must be one of 'change' or 'LandR'")

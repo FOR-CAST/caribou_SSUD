@@ -115,9 +115,14 @@ test_that("timeSinceLayers() takes the more recent of modelLand's and the simula
   out <- timeSinceLayers(c("ts_fire_240", "ts_fire_1200"), base, 2035, 2025, 200, simTs)
   expect_named(out, c("ts_fire_240", "ts_fire_1200"))
   expect_equal(unlist(out$ts_fire_240[1:5]), c(15, 3, 200, 8, 200), ignore_attr = TRUE)
-  ## 1200 m: the mean fire year of the block's burned cells (2020, 2032, 2027)
-  expect_equal(out$ts_fire_1200[1][[1]], 2035 - mean(c(2020, 2032, 2027)))
+  ## 1200 m: the most recent fire year of the block's burned cells (2020, 2032, 2027)
+  expect_equal(out$ts_fire_1200[1][[1]], 2035 - 2032)
   expect_equal(out$ts_fire_1200[100][[1]], 200)
+
+  ## or their mean
+  out <- timeSinceLayers("ts_fire_1200", base, 2035, 2025, 200, simTs, coarse = "mean")
+  expect_equal(out$ts_fire_1200[1][[1]], 2035 - mean(c(2020, 2032, 2027)))
+  expect_error(timeSinceLayers("ts_fire_1200", base, 2035, 2025, 200, coarse = "max"), "'recent' or 'mean'")
 
   ## no simulation fires: modelLand's layer only ages
   aged <- timeSinceLayers("ts_fire_240", base, 2035, 2025, 200)
