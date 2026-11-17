@@ -256,6 +256,24 @@ test_that("a dynamic run with a season model makes the season and full-year maps
                                         paste0("pde_", c("global", "global_winter"), "_year2030.tif")))))
 })
 
+test_that("a dynamic run takes modelLand as one multi-layer SpatRaster, as a list of its layers", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+  objs <- dyn_objects()
+  objs$modelLand <- terra::rast(objs$modelLand)
+
+  sim <- suppressMessages(SpaDES.core::spades(
+    run_simInit(paths, objs, params = list(simulationProcess = "dynamic", predictStartYear = 2030,
+                                           predictionInterval = 5),
+                times = list(start = 2025, end = 2030)),
+    debug = FALSE
+  ))
+  expect_type(sim$modelLand, "list")
+  expect_named(sim$modelLand, c("prop_forest_240", "ts_fire_240", "prop_veg_240"))
+  expect_named(sim$fixedSSUD, "prop_veg_240")
+  expect_named(sim$simPde$year2030, "global")
+})
+
 test_that("a static run makes only the baseline, and schedules no forecast", {
   skip_if_not_installed("SpaDES.core")
   paths <- local_spades_sandbox()
