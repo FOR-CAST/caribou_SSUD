@@ -1,6 +1,7 @@
-## Render the module's manual, caribou_SSUD.Rmd, to caribou_SSUD.html. The manual's tables come from
-## the module's metadata (defineModule() in caribou_SSUD.R), so it needs SpaDES.core but no data. On a
-## pull request it only checks that the manual renders; on a push to main it also commits the html.
+## Render the module's manual, caribou_SSUD.Rmd, to caribou_SSUD.md, which GitHub shows as a page. The
+## manual's tables come from the module's metadata (defineModule() in caribou_SSUD.R), so it needs
+## SpaDES.core but no data. On a pull request it only checks that the manual renders; on a push to main
+## it also commits the .md.
 ## The PredictiveEcology packages are pinned to the commits test-module.yaml uses.
 name: Render module Rmd
 
@@ -44,7 +45,6 @@ jobs:
         with:
           packages: |
             any::bookdown
-            any::kableExtra
             any::knitr
             any::rmarkdown
             any::remotes
@@ -79,6 +79,6 @@ jobs:
         run: |
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
-          git add caribou_SSUD.html
+          git add caribou_SSUD.md
           git commit -m 'Re-build caribou_SSUD.Rmd [skip-ci]' || { echo "No changes to commit"; exit 0; }
           git push origin HEAD:${{ github.ref }}
