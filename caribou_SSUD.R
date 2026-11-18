@@ -4,7 +4,7 @@ defineModule(sim, list(
   keywords = c('steady-state utilization distribution', 'iSSA'),
   authors = structure(list(list(given = c("Julie", "W"), family = "Turner", role = c("aut", "cre"), email = "julwturner@gmail.com", comment = NULL)), class = "person"),
   childModules = character(0),
-  version = list(caribou_SSUD = "0.0.0.9001"),
+  version = list(caribou_SSUD = "0.0.1.9000"),
   timeframe = as.POSIXlt(c(NA, NA)),
   timeunit = "year",
   citation = list("citation.bib"),

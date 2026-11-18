@@ -8,7 +8,7 @@ output:
     html_preview: false
 editor_options:
   chunk_output_type: console
-  bibliography: citations/references_caribou_SSUD.bib
+bibliography: citation.bib
 link-citations: true
 always_allow_html: true
 ---
