@@ -61,19 +61,22 @@ test_that("ssudGrid() stops naming the modelLand layers not on rasterToMatch's g
   expect_error(ssudGrid(land), "first modelLand layer.*: y$")
 })
 
-test_that("readModelTerms() finds categorical layers and other variables, e.g. seasons, in the landscape terms", {
+test_that("readModelTerms() finds categorical layers, seasons and other variables in the landscape terms", {
   coefs <- nm_terms(c("x_end", "lc_endopen", "lc_endmixed wood", "x_end:seasonwinter",
-                      "seasonwinter:I(log((sl_ + 1)/1000))", "seasonwinter"))
+                      "seasonsummer:x_end", "seasonwinter:I(log((sl_ + 1)/1000))", "seasonwinter",
+                      "yearseason2020:x_end"))
   terms <- readModelTerms(coefs)
 
   expect_identical(terms$layers, c("x", "lc"))
   expect_identical(terms$categorical, data.frame(layer = c("lc", "lc"), level = c("open", "mixed wood")))
-  expect_identical(terms$other, "seasonwinter")
+  expect_identical(terms$seasons, c("winter", "summer"))
+  expect_identical(terms$other, "yearseason2020")
 })
 
-test_that("checkModelLayers() stops for a season model or a categorical layer, naming them", {
-  expect_error(checkModelLayers(list(global = nm_terms("seasonwinter:prop_forest_240_end")), "prop_forest_240"),
-               "'global'.*seasonwinter.*not supported yet")
+test_that("checkModelLayers() takes a season model, and stops for other variables or a categorical layer", {
+  expect_true(checkModelLayers(list(global = nm_terms("seasonwinter:prop_forest_240_end")), "prop_forest_240"))
+  expect_error(checkModelLayers(list(global = nm_terms("yearseason2020:prop_forest_240_end")), "prop_forest_240"),
+               "'global'.*yearseason2020.*neither")
   expect_error(checkModelLayers(list(global = nm_terms(c("x_end", "lc_endopen"))), c("x", "lc")),
                "categorical.*lc \\(level 'open'\\)")
 })

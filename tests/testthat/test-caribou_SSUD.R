@@ -233,6 +233,29 @@ test_that("a dynamic run forecasts the forest and fire layers from LandR and scf
   expect_equal(land$prop_veg_240[1][[1]], 0.3, tolerance = 1e-6)
 })
 
+test_that("a dynamic run with a season model makes the season and full-year maps, for the baseline and forecasts", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+  objs <- dyn_objects()
+  objs$iSSAcoefficients <- data.table::data.table(
+    term = c("seasonwinter:prop_forest_240_end", "seasonsummer:prop_forest_240_end", "ts_fire_240_end",
+             "seasonwinter:prop_veg_240_end", "seasonsummer:prop_veg_240_end"),
+    estimate = c(1, -1, -0.01, 0.5, 0.2)
+  )
+  objs$iSSAseasons <- data.table::data.table(season = c("winter", "summer"), days = c(200L, 165L))
+
+  sim <- suppressMessages(SpaDES.core::spades(
+    run_simInit(paths, objs, params = list(simulationProcess = "dynamic", predictStartYear = 2030,
+                                           predictionInterval = 5, seasonMaps = "winter"),
+                times = list(start = 2025, end = 2030)),
+    debug = FALSE
+  ))
+  expect_named(sim$pde, c("global", "global_winter"))
+  expect_named(sim$simPde$year2030, c("global", "global_winter"))
+  expect_true(all(file.exists(file.path(paths$other, "pde_test", "sims",
+                                        paste0("pde_", c("global", "global_winter"), "_year2030.tif")))))
+})
+
 test_that("a dynamic run takes modelLand as one multi-layer SpatRaster, as a list of its layers", {
   skip_if_not_installed("SpaDES.core")
   paths <- local_spades_sandbox()
