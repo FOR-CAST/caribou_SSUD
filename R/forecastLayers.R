@@ -172,8 +172,8 @@ timeSinceBase <- function(stem, modelLand, cellSize) {
 
 # the forecast landscape for `year`: every layer in `layers`, by its source (layerSources()). Static
 # layers (no source, or a source whose objects the sim lacks) come from modelLand; `objs` holds the
-# sim's objects (cohortData, pixelGroupMap, sppEquiv, timeSinceFire, forestBaseline); `p` the
-# module's parameters. Returns a SpatRaster with one layer per name
+# sim's objects (cohortData, pixelGroupMap, sppEquiv, timeSinceFire, forestBaseline,
+# disturbanceList); `p` the module's parameters. Returns a SpatRaster with one layer per name
 buildForecastLayers <- function(layers, sources, year, modelLand, grid, objs, p) {
 
   info <- parseLayerName(layers)
@@ -222,8 +222,37 @@ buildForecastLayers <- function(layers, sources, year, modelLand, grid, objs, p)
     }
   }
 
-  # sources this module cannot build yet (e.g. disturbance: step D)
-  other <- layers[!is.na(sources) & !sources %in% c("forest", "fire", "harvest")]
+  # distances to human disturbance (anthroDisturbance_Generator's disturbanceList)
+  dist <- layers[sources %in% "disturbance"]
+  if (length(dist)) {
+    if (is.null(objs$disturbanceList)) {
+      message("No disturbanceList in the sim: these distance layers stay as in modelLand: ",
+              paste(dist, collapse = ", "))
+      static <- c(static, dist)
+    } else {
+      classes <- p$disturbanceClasses
+      if (is.null(classes)) classes <- defaultDisturbanceClasses(p$ecotype)
+      unlinked <- dist[!info$stem[match(dist, info$layer)] %in% names(classes)]
+      if (length(unlinked)) {
+        message("No disturbanceClasses for these distance layers, which stay as in modelLand: ",
+                paste(unlinked, collapse = ", "))
+        static <- c(static, unlinked)
+      }
+      for (stem in unique(info$stem[info$layer %in% setdiff(dist, unlinked)])) {
+        ns <- dist[info$stem[match(dist, info$layer)] == stem]
+        missing <- setdiff(ns, names(modelLand))
+        if (length(missing))
+          stop("modelLand lacks these distance layers the forecast starts from: ",
+               paste(missing, collapse = ", "), call. = FALSE)
+        d <- featureDistance(disturbanceFeatures(objs$disturbanceList, classes[[stem]]), grid,
+                             p$distanceCellSize)
+        out[ns] <- lapply(ns, function(n) distanceLayer(n, modelLand[[n]], d, p$distanceCap))
+      }
+    }
+  }
+
+  # sources this module cannot build yet
+  other <- layers[!is.na(sources) & !sources %in% c("forest", "fire", "harvest", "disturbance")]
   if (length(other)) {
     message("These layers stay as in modelLand (no forecast for their source yet): ",
             paste(other, collapse = ", "))
@@ -277,4 +306,110 @@ makeForestBaseline <- function(stems, cohortData, pixelGroupMap, p, sppEquiv = N
     landRForestCells(cohortData, pixelGroupMap, forestTypesFor(s, p$forestTypes), p$forestMinBiomass,
                      sppEquiv, p$sppEquivCol)
   }), stems)
+}
+
+# the model covariates' anthroDisturbance_Generator classes ("sector/class" in disturbanceList), by
+# ecotype (disturbanceClasses = NULL). Northern mountain: the Yukon disturbance categories the model
+# was fit on, as YT_caribou links them to the Generator's classes; dist_lfother and dist_otherpoly
+# have no Generator class. Boreal: none yet
+defaultDisturbanceClasses <- function(ecotype) {
+  if (ecotype == "boreal") return(list())
+  list(dist_paved = "roads/paved", dist_unpaved = "roads/unpaved", dist_placer = "mining/placer",
+       dist_quartz = "mining/quartz", dist_othermines = "mining/otherMines")
+}
+
+# the features of `classes` ("sector/class", one or more) in disturbanceList, as one SpatVector; NULL
+# if there are none. Stops for a class disturbanceList lacks, or one that is not a vector layer
+disturbanceFeatures <- function(disturbanceList, classes) {
+  parts <- strsplit(classes, "/", fixed = TRUE)
+  bad <- classes[lengths(parts) != 2]
+  if (length(bad))
+    stop("disturbanceClasses must name each class as 'sector/class' (e.g. 'roads/paved'), not: ",
+         paste(bad, collapse = ", "), call. = FALSE)
+
+  feats <- lapply(seq_along(classes), function(k) {
+    x <- disturbanceList[[parts[[k]][1]]][[parts[[k]][2]]]
+    if (is.null(x))
+      stop("disturbanceList has no class ", classes[k], call. = FALSE)
+    if (inherits(x, "sf")) x <- terra::vect(x)
+    if (!inherits(x, "SpatVector"))
+      stop("disturbanceList's ", classes[k], " is a ", class(x)[1], ", not a vector layer (SpatVector",
+           " or sf): distances are measured to features", call. = FALSE)
+    if (nrow(x)) x[, 0] else NULL
+  })
+  feats <- Filter(Negate(is.null), feats)
+  if (!length(feats)) return(NULL)
+  if (length(feats) > 1) {
+    crs <- terra::crs(feats[[1]])
+    feats <- lapply(feats, function(f) if (terra::same.crs(f, feats[[1]])) f else terra::project(f, crs))
+  }
+  do.call(rbind, unname(feats))
+}
+
+# the distance (m) from each grid cell to `features`, as hsaCEtool measures it: on a grid of
+# `cellSize` m cells (the grid's cells split; the grid's own cells if `cellSize` is theirs), the
+# distance from each cell to the nearest cell a feature touches, then the mean over each grid cell's
+# fine cells. NA outside the grid's cells; NULL if there are no features
+featureDistance <- function(features, grid, cellSize = 30) {
+  if (is.null(features)) return(NULL)
+  cell <- terra::res(grid)[1]
+  k <- cell / cellSize
+  if (k < 1 || abs(k - round(k)) > 1e-8)
+    stop("distanceCellSize (", cellSize, " m) must divide the grid's ", cell, " m cells evenly",
+         call. = FALSE)
+  k <- round(k)
+
+  if (!terra::same.crs(features, grid)) features <- terra::project(features, grid)
+  fine <- if (k > 1) terra::disagg(grid[[1]], fact = k) else grid[[1]]
+  hit <- terra::rasterize(features, terra::rast(fine), field = 1, touches = TRUE)
+  if (all(is.na(terra::global(hit, "max", na.rm = TRUE)[[1]]))) return(NULL)
+  d <- terra::distance(hit)
+  # a grid with no values has no cells left out
+  if (terra::hasValues(fine)) d <- terra::mask(d, fine)
+  if (k > 1) d <- terra::aggregate(d, fact = k, fun = "mean", na.rm = TRUE)
+  names(d) <- "distance"
+  d
+}
+
+# the forecast of one distance layer (e.g. dist_paved_240_adj): the smaller of modelLand's layer
+# (`base`) and the distance to the sim's features (`d`, from featureDistance(); NULL = none), at the
+# layer's resolution; then, for an `_adj` layer, more than cap$beyond_km gives cap$set_to_km. Features
+# are only ever added, so the nearest one is either modelLand's or one of the sim's
+distanceLayer <- function(name, base, d, cap) {
+  info <- parseLayerName(name)
+  out <- base
+  if (!is.null(d)) {
+    simD <- terra::mask(toResolution(d, info$res), base)
+    out <- terra::ifel(!is.na(simD) & simD < base, simD, base)
+  }
+  if (info$adj) out <- capDistance(out, cap)
+  names(out) <- name
+  out
+}
+
+# capped distances: more than cap$beyond_km km gives cap$set_to_km km
+capDistance <- function(x, cap) {
+  if (is.null(cap$beyond_km) || is.null(cap$set_to_km))
+    stop("distanceCap must be a list with beyond_km and set_to_km", call. = FALSE)
+  terra::ifel(x > cap$beyond_km * 1000, cap$set_to_km * 1000, x)
+}
+
+# at the start of a simulation, the sim's features of each category should all be in modelLand's,
+# so their distances should be no shorter than modelLand's. Returns, for each distance layer where
+# they are more than `tolerance` m shorter in some cells, the share of cells (named by layer)
+disturbanceMismatch <- function(layers, modelLand, grid, disturbanceList, classes, p,
+                                tolerance = terra::res(grid)[1]) {
+  info <- parseLayerName(layers)
+  out <- c()
+  for (stem in intersect(unique(info$stem), names(classes))) {
+    d <- featureDistance(disturbanceFeatures(disturbanceList, classes[[stem]]), grid, p$distanceCellSize)
+    if (is.null(d)) next
+    for (n in info$layer[info$stem == stem & info$layer %in% names(modelLand)]) {
+      simD <- toResolution(d, parseLayerName(n)$res)
+      if (parseLayerName(n)$adj) simD <- capDistance(simD, p$distanceCap)
+      shorter <- terra::global(simD < modelLand[[n]] - tolerance, "mean", na.rm = TRUE)[[1]]
+      if (isTRUE(shorter > 0)) out[n] <- shorter
+    }
+  }
+  out
 }

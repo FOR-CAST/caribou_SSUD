@@ -250,3 +250,86 @@ test_that("buildForecastLayers() stops for a static layer modelLand lacks, and a
                                    objs = list(timeSinceFire = terra::shift(fixture_grid(), dx = 240)), p = p),
                "timeSinceFire is not on the forecast grid")
 })
+
+## a vertical line at x (m) down the whole fixture grid, as anthroDisturbance_Generator keeps features
+fixture_line <- function(x) {
+  terra::vect(paste0("LINESTRING (", x, " 0, ", x, " 2400)"), crs = "EPSG:3154")
+}
+
+test_that("disturbanceFeatures() combines the classes asked for, and stops for one it cannot use", {
+  dl <- list(roads = list(paved = fixture_line(120), unpaved = sf::st_as_sf(fixture_line(600))),
+             mining = list(placer = fixture_line(0)[0], potential = fixture_grid()))
+  expect_equal(nrow(disturbanceFeatures(dl, c("roads/paved", "roads/unpaved"))), 2)
+  expect_null(disturbanceFeatures(dl, "mining/placer"))
+  expect_error(disturbanceFeatures(dl, "roads/gravel"), "no class roads/gravel")
+  expect_error(disturbanceFeatures(dl, "paved"), "'sector/class'")
+  expect_error(disturbanceFeatures(dl, "mining/potential"), "not a vector layer")
+})
+
+test_that("featureDistance() averages the fine cells' distances to the nearest touched cell", {
+  g <- fixture_grid()
+  g[100] <- NA
+  ## on the grid's own cells: the line touches column 1, so column j is (j - 1) * 240 m away
+  d <- featureDistance(fixture_line(120), g, 240)
+  expect_equal(unlist(d[1, 1:3]), c(0, 240, 480), ignore_attr = TRUE)
+  expect_true(is.na(d[100][[1]]))
+  ## on 120 m cells a line at x = 100 touches fine column 1: grid column 1 is the mean of fine
+  ## columns 1 (0 m) and 2 (120 m), grid column 2 of fine columns 3 (240 m) and 4 (360 m)
+  d <- featureDistance(fixture_line(100), g, 120)
+  expect_equal(unlist(d[1, 1:2]), c(60, 300), ignore_attr = TRUE)
+  expect_null(featureDistance(NULL, g))
+  expect_error(featureDistance(fixture_line(120), g, 100), "divide the grid's 240 m cells")
+})
+
+test_that("distanceLayer() takes the nearer of modelLand's and the sim's features, then caps _adj", {
+  base <- fixture_grid(25000)
+  base[2] <- 300
+  d <- fixture_grid(500)
+  d[3] <- 20500
+  cap <- list(beyond_km = 20, set_to_km = 21)
+  out <- distanceLayer("dist_paved_240_adj", base, d, cap)
+  expect_equal(out[1:3][[1]], c(500, 300, 21000))
+  ## an uncapped layer, and no features in the sim
+  expect_equal(distanceLayer("dist_paved_240", base, d, cap)[3][[1]], 20500)
+  expect_equal(distanceLayer("dist_paved_240_adj", base, NULL, cap)[1:2][[1]], c(21000, 300))
+  ## a coarser layer: the sim's distances averaged over the block first
+  out <- distanceLayer("dist_paved_1200", fixture_grid(1000), fixture_grid(500), cap)
+  expect_equal(out[1][[1]], 500)
+})
+
+test_that("buildForecastLayers() measures distances to the linked classes; unlinked ones stay", {
+  ml <- list(dist_paved_240_adj = fixture_grid(25000), dist_lfother_240_adj = fixture_grid(700))
+  layers <- names(ml)
+  sources <- layerSources(layers, defaultDynamicLayers("northern_mountain"))
+  p <- list(ecotype = "northern_mountain", disturbanceClasses = NULL, distanceCellSize = 240,
+            distanceCap = list(beyond_km = 20, set_to_km = 21))
+  dl <- list(roads = list(paved = fixture_line(120)))
+  expect_message(
+    out <- buildForecastLayers(layers, sources, 2030, ml, fixture_grid(), objs = list(disturbanceList = dl),
+                               p = p),
+    "No disturbanceClasses.*dist_lfother_240_adj"
+  )
+  expect_equal(unlist(out$dist_paved_240_adj[1, 1:2]), c(0, 240), ignore_attr = TRUE)
+  expect_equal(out$dist_lfother_240_adj[1][[1]], 700)
+  ## a linked class disturbanceList lacks
+  p$disturbanceClasses <- list(dist_paved = "roads/highway")
+  expect_error(suppressMessages(buildForecastLayers(layers, sources, 2030, ml, fixture_grid(),
+                                                    objs = list(disturbanceList = dl), p = p)),
+               "no class roads/highway")
+})
+
+test_that("disturbanceMismatch() finds cells where the sim's features are nearer than modelLand's", {
+  g <- fixture_grid()
+  p <- list(distanceCellSize = 240, distanceCap = list(beyond_km = 20, set_to_km = 21))
+  classes <- defaultDisturbanceClasses("northern_mountain")
+  dl <- list(roads = list(paved = fixture_line(120)))
+  ## modelLand already has the road: no mismatch
+  ml <- list(dist_paved_240_adj = featureDistance(fixture_line(120), g, 240))
+  expect_length(disturbanceMismatch("dist_paved_240_adj", ml, g, dl, classes, p), 0)
+  ## modelLand's nearest paved road is far away: every cell but the farthest columns is shorter
+  ml <- list(dist_paved_240_adj = fixture_grid(3000))
+  out <- disturbanceMismatch("dist_paved_240_adj", ml, g, dl, classes, p)
+  expect_named(out, "dist_paved_240_adj")
+  expect_equal(unname(out), 1)
+  expect_length(defaultDisturbanceClasses("boreal"), 0)
+})

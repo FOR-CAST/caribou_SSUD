@@ -41,7 +41,8 @@ defineModule(sim, list(
                            " what: a named list, source = a regular expression matched against layer",
                            " names. Sources: 'forest' (LandR's cohortData and pixelGroupMap), 'fire'",
                            " (scfm's timeSinceFire), 'harvest' (no forecaster yet: the layer only",
-                           " ages) and 'disturbance' (not yet forecast: kept as in modelLand). A layer",
+                           " ages) and 'disturbance' (distances to anthroDisturbance_Generator's",
+                           " features, see disturbanceClasses). A layer",
                            " that matches no pattern stays as in modelLand (e.g. vegetation). NULL = the",
                            " ecotype's default: northern mountain list(forest = '^prop_forest_', fire =",
                            " '^ts_fire_', harvest = '^ts_harv(est)?_', disturbance = '^dist_'); boreal",
@@ -65,6 +66,28 @@ defineModule(sim, list(
                            " ts_harv_1200): 'recent' = the most recent harvest in the block; 'mean' =",
                            " the mean harvest year (unharvested cells left out). Use the rule the model",
                            " was fit with.")),
+    defineParameter("disturbanceClasses", "list", NULL, NA, NA,
+                    paste0("Dynamic mode: which of anthroDisturbance_Generator's classes each distance",
+                           " covariate (the layer name without resolution or `_adj`, e.g. dist_paved)",
+                           " measures to, as 'sector/class' in disturbanceList; several classes are",
+                           " combined. A forecast distance is the smaller of modelLand's and the distance",
+                           " to the class's features that year (features are only ever added), so",
+                           " features outside the study area or in no Generator class still count. A",
+                           " covariate not listed stays as in modelLand. NULL = the ecotype's default:",
+                           " northern mountain list(dist_paved = 'roads/paved', dist_unpaved =",
+                           " 'roads/unpaved', dist_placer = 'mining/placer', dist_quartz =",
+                           " 'mining/quartz', dist_othermines = 'mining/otherMines') (dist_lfother and",
+                           " dist_otherpoly have no Generator class); boreal none.")),
+    defineParameter("distanceCellSize", "numeric", 30, NA, NA,
+                    paste0("Dynamic mode: cell size (m) distances are measured on, as hsaCEtool does: the",
+                           " distance from each cell of this size to the nearest one a feature touches,",
+                           " then the mean over each grid cell (e.g. a 240 m cell's 64 30 m cells). Must",
+                           " divide the grid's cell size evenly; the grid's cell size = distances from",
+                           " cell centres (faster, but not as the model's layers were made).")),
+    defineParameter("distanceCap", "list", list(beyond_km = 20, set_to_km = 21), NA, NA,
+                    paste0("Dynamic mode: how capped distances (layers named with `_adj`, e.g.",
+                           " dist_paved_240_adj) are capped, as hsaCEtool's `distance_cap`: more than",
+                           " beyond_km km gives set_to_km km.")),
     defineParameter("forestMinBiomass", "numeric", 0, 0, NA,
                     paste0("Dynamic mode: a LandR cell is forest when its stand has more than this",
                            " much tree biomass (g/m2, LandR's unit for B); 0 = any tree biomass.")),
@@ -193,6 +216,12 @@ defineModule(sim, list(
                               "it has not burned (as scfmSpread keeps it), on the forecast grid. Fire",
                               "layers take a cell's fire year from it where that is more recent than",
                               "modelLand's. If absent, fire layers only age.")),
+    expectsInput(objectName = "disturbanceList", objectClass = "list",
+                 desc = paste("Dynamic mode: anthroDisturbance_Generator's disturbances, a list by sector",
+                              "of lists by class, each holding all of that class's features (existing and",
+                              "simulated) as a SpatVector (or sf). Distance layers are measured to the",
+                              "classes in disturbanceClasses. If absent, distance layers stay as in",
+                              "modelLand.")),
     expectsInput(objectName = "sppEquiv", objectClass = "data.table",
                  desc = paste("Dynamic mode: LandR's species-equivalence table, with a `Type` column",
                               "(Conifer/Deciduous) and the species codes in column sppEquivCol. If",
@@ -289,6 +318,8 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
                                                    P(sim), sim$sppEquiv)
         }
 
+        # the sim's disturbance features at the start should all be in modelLand's distances
+        if (!is.null(sim$disturbanceList)) checkDisturbanceStart(sim, grid)
 
         # always run simLayers
         sim <- scheduleEvent(sim, P(sim)$predictStartYear, "caribou_SSUD", "simLayers")
@@ -321,7 +352,8 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
       simLand <- buildForecastLayers(
         layers = names(sources), sources = sources, year = thisYear, modelLand = land, grid = grid,
         objs = list(cohortData = sim$cohortData, pixelGroupMap = sim$pixelGroupMap, sppEquiv = sim$sppEquiv,
-                    timeSinceFire = sim$timeSinceFire, forestBaseline = sim$forestBaseline),
+                    timeSinceFire = sim$timeSinceFire, forestBaseline = sim$forestBaseline,
+                    disturbanceList = sim$disturbanceList),
         p = P(sim)
       )
 
@@ -402,6 +434,13 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
   }
   if (length(P(sim)$forestForecast) != 1 || !P(sim)$forestForecast %in% c("change", "LandR")) {
     stop("forestForecast must be one of 'change' or 'LandR'")
+  }
+  if (length(P(sim)$distanceCellSize) != 1 || !isTRUE(P(sim)$distanceCellSize > 0)) {
+    stop("distanceCellSize must be one cell size in m, more than 0")
+  }
+  cap <- P(sim)$distanceCap
+  if (!is.list(cap) || !all(c("beyond_km", "set_to_km") %in% names(cap))) {
+    stop("distanceCap must be a list with beyond_km and set_to_km, e.g. list(beyond_km = 20, set_to_km = 21)")
   }
 
   # the models the baseline (and forecasts) predict
@@ -573,6 +612,24 @@ forecastSources <- function(sim, modelNames = pdeModelNames(P(sim)$simulationSca
   dyn <- P(sim)$dynamicLayers
   if (is.null(dyn)) dyn <- defaultDynamicLayers(P(sim)$ecotype)
   layerSources(layers, dyn)
+}
+
+## Warns when, at the start, distances to the sim's disturbance features are shorter than modelLand's:
+## a disturbanceClasses class that holds features modelLand puts in another category
+checkDisturbanceStart <- function(sim, grid) {
+  sources <- forecastSources(sim)
+  layers <- names(sources)[sources %in% "disturbance"]
+  if (!length(layers)) return(invisible(NULL))
+  classes <- P(sim)$disturbanceClasses
+  if (is.null(classes)) classes <- defaultDisturbanceClasses(P(sim)$ecotype)
+  shorter <- disturbanceMismatch(layers, sim$modelLand, grid, sim$disturbanceList, classes, P(sim))
+  if (length(shorter))
+    warning("At the start, distances to disturbanceList's features are shorter than modelLand's (by",
+            " more than a grid cell) in some cells: ", paste0(names(shorter), " (",
+            signif(100 * shorter, 2), "% of cells)", collapse = ", "), ". Check that disturbanceClasses",
+            " links each covariate to the Generator classes of the same disturbance category.",
+            call. = FALSE)
+  invisible(shorter)
 }
 
 ## The forest covariates (e.g. prop_forest) of the layers the forecast builds from LandR

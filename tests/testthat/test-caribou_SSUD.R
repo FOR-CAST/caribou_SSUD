@@ -233,6 +233,30 @@ test_that("a dynamic run forecasts the forest and fire layers from LandR and scf
   expect_equal(land$prop_veg_240[1][[1]], 0.3, tolerance = 1e-6)
 })
 
+test_that("a dynamic run measures distances to disturbanceList's features, and warns of a mismatch at the start", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+  objs <- dyn_objects()
+  objs$iSSAcoefficients <- rbind(objs$iSSAcoefficients,
+                                 data.table::data.table(term = "dist_paved_240_adj_end", estimate = -0.0001))
+  objs$modelLand$dist_paved_240_adj <- terra::rast(objs$rasterToMatch, vals = 21000)
+  ## a paved road at x = 100 m, which modelLand does not have: the start-of-run check warns
+  objs$disturbanceList <- list(roads = list(paved = terra::vect("LINESTRING (100 0, 100 2400)", crs = "EPSG:3154")))
+
+  expect_warning(
+    sim <- suppressMessages(SpaDES.core::spades(
+      run_simInit(paths, objs, params = list(simulationProcess = "dynamic", predictStartYear = 2030),
+                  times = list(start = 2025, end = 2030)),
+      debug = FALSE
+    )),
+    "shorter than modelLand's.*dist_paved_240_adj"
+  )
+  land <- terra::rast(file.path(paths$other, "pde_test", "sims", "pdeLayers_test_year2030.tif"))
+  ## on 30 m cells the road touches the 4th of column 1's eight: their mean distance is 60 m, and
+  ## column 2's (the 5th to 12th from the road) 255 m
+  expect_equal(unlist(land$dist_paved_240_adj[1, 1:2]), c(60, 255), ignore_attr = TRUE)
+})
+
 test_that("a dynamic run with a season model makes the season and full-year maps, for the baseline and forecasts", {
   skip_if_not_installed("SpaDES.core")
   paths <- local_spades_sandbox()
