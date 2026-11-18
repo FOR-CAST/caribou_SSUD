@@ -1,6 +1,6 @@
 caribou_SSUD Manual
 ================
-Version 0.0.0.9001, last updated: 2026-11-17
+Version 0.0.0.9001, last updated: 2026-11-18
 
 - [caribou_SSUD Module](#caribou_ssud-module)
   - [Module Overview](#module-overview)
@@ -48,6 +48,7 @@ the full list of module inputs.
 |:---|:---|:---|:---|
 | iSSAmodels | list | A list of glmmTMB iSSA models by jurisdiction or global models (boreal ecotype) | NA |
 | iSSAcoefficients | data.table | Fixed-effect coefficients of the northern mountain iSSA model: one row per term, with columns `term` and `estimate` (others, e.g. those of hsaCEtool’s `<model>_fixed.csv`, are ignored). If not supplied, it is taken from `iSSAmodels` when that is supplied, else read from `<coefficientsModel>_fixed.csv` in `NMC_model_<coefficientsModel>.zip` in `modelsFolderID`. | NA |
+| iSSAseasons | data.table | For a model with seasons and seasonWeights ‘length’: the model’s season table, one row per season, with columns `season` (as in the terms, e.g. `winter` for `seasonwinter`) and `days` (days per season), as hsaCEtool’s `<model>_seasons.csv` gives it. If not supplied, read from `<coefficientsModel>_seasons.csv` in the model’s zip, when it has one (models fit before hsaCEtool wrote this table do not). | NA |
 | cohortData | data.table | `data.table` with cohort-level information on age and biomass, by `pixelGroup` and ecolocation (i.e., `ecoregionGroup`). If supplied, it must have the following columns: `pixelGroup` (integer), `ecoregionGroup` (factor), `speciesCode` (factor), `B` (integer in $g/m^2$), `age` (integer in years) | NA |
 | pixelGroupMap | SpatRaster | A raster layer with `pixelGroup` IDs per pixel. Pixels are grouped based on identical `ecoregionGroup`, `speciesCode`, `age` and `B` composition, even if the user supplies other initial groupings (e.g., via the `Biomass_borealDataPrep` module. | NA |
 | timeSinceFire | SpatRaster | Dynamic mode: years since each cell last burned in the simulation, NA where it has not burned (as scfmSpread keeps it), on the forecast grid. Fire layers take a cell’s fire year from it where that is more recent than modelLand’s. If absent, fire layers only age. | NA |
@@ -58,7 +59,7 @@ the full list of module inputs.
 | studyAreaReporting | SpatVector | Optional: the area the results are reported for (e.g. a range buffer clipped to a jurisdiction), a SpatVector or sf polygon. Used only when pdeArea is ‘fullReportingArea’ or ‘regionalReportingArea’. | NA |
 | rasterToMatch | SpatRaster | Dynamic mode: the simulation’s grid, e.g. the one LandR and scfm use. The forecast layers are built on it, and every modelLand layer must be on it (same extent, rows and columns, cell size and coordinate system), or the run stops. If not supplied, modelLand’s grid is used. | NA |
 | studyArea_juris | list | Named list of SpatVectors, one area per region (e.g. jurisdiction), for the regional models. Not needed when simulationScale is ‘global’. | NA |
-| pde | list | Baseline PDE (raw utility if normalizePDE is FALSE): a named list with one SpatRaster per model (‘global’ and/or a region). If not supplied, read from baselineSource, else made from modelLand. | NA |
+| pde | list | Baseline PDE (raw utility if normalizePDE is FALSE): a named list with one SpatRaster per model (‘global’ and/or a region), or for a model with seasons, per season map and the full-year map (see seasonMaps, fullYear). If not supplied, read from baselineSource, else made from modelLand. | NA |
 | pdeMap | list | Baseline binned PDE maps, named as `pde`; NULL if normalizePDE is FALSE. | NA |
 | fixedSSUD | SpatRaster | Dynamic mode: the layers the models read that do not change in forecasts (those no dynamicLayers pattern matches), named as in the terms. If not supplied, taken from modelLand. | NA |
 
@@ -88,6 +89,9 @@ Provide a summary of user-visible parameters (Table
 | simulationScale | character | global | NA | NA | Which models to predict: ‘global’ (the global model, over studyAreaCaribou), ‘regional’ (one model per region in `jurisdiction`, each over its area in studyArea_juris), or ‘both’. ‘jurisdictional’ is read as ‘regional’. | TRUE |
 | baselineSource | character | NA | NA | NA | A premade baseline, used when `pde` is not supplied: a folder, a .zip file, or a URL (e.g. of a .zip on Google Drive) holding `pde_<model>.tif` (and `pdeMap_<model>.tif` if normalizePDE) for each model, as this module writes them. If NA, the baseline is made from modelLand and saved to outputPath. | TRUE |
 | pdeArea | character | fullArea…. | NA | NA | The area each PDE is predicted, normalized (summed to 1) and binned into its map over, so a map compares cells within that area. One choice for the global model: ‘fullArea’ (studyAreaCaribou, the area the global model was fit on) or ‘fullReportingArea’ (studyAreaReporting, which may reach beyond the fitted area); and one for the regional models: ‘regionalArea’ (the model’s region in studyArea_juris) or ‘regionalReportingArea’ (the part of studyAreaReporting inside the model’s region). Only the choice for the models run (simulationScale) is used. The ‘Reporting’ choices need studyAreaReporting. | TRUE |
+| seasonMaps | character |  | NA | NA | For a model with seasons (terms such as `seasonwinter:prop_forest_240_end`): the seasons that each get a map of their own, named `<model>_<season>` (e.g. global_winter, written as pde_global_winter.tif). A season’s map uses the terms without a season and that season’s terms. NULL = all the model’s seasons; character(0) = none. Models without seasons ignore it. | TRUE |
+| fullYear | character |  | NA | NA | For a model with seasons: the seasons combined into one full-year map, named as the model (e.g. global, written as pde_global.tif): the seasons’ PDEs, weighted by seasonWeights, so it still sums to 1. NULL = all the model’s seasons; character(0) = no full-year map. Needs normalizePDE. Models without seasons ignore it. | TRUE |
+| seasonWeights | characte…. | length | NA | NA | How the seasons in fullYear are weighted: ‘length’ = by days per season, from iSSAseasons; ‘equal’; or numbers named by season (e.g. c(winter = 2, summer = 1)), scaled to sum to 1. | TRUE |
 | normalizePDE | logical | TRUE | NA | NA | Whether to normalize PDE inside SSUD (FALSE for tmux workflow) | TRUE |
 | jurisdiction | character | BC, SK, …. | NA | NA | A list of jurisdictions to use for PDE creation | TRUE |
 | ecotype | character | boreal | NA | NA | Which ecotype of caribou were modelled: ‘boreal’ or ‘northern_mountain’ | TRUE |
@@ -127,9 +131,9 @@ Description of the module outputs (Table
 |:---|:---|:---|
 | fixedSSUD | SpatRaster | Dynamic mode: the layers that do not change in forecasts (see inputs) |
 | forestBaseline | list | Dynamic mode: LandR’s forest at the start of the simulation (see inputs) |
-| pde | list | Current (pre simulation) Raw pde calculation, one SpatRaster per model |
-| pdeMap | list | Current (pre simulation) binned map of pde UD for intensity of selection, one SpatRaster per model |
-| simPde | list | Raw pde calculation from sim layers, by year, then one SpatRaster per model |
+| pde | list | Current (pre simulation) Raw pde calculation, one SpatRaster per map (see the input `pde`) |
+| pdeMap | list | Current (pre simulation) binned map of pde UD for intensity of selection, one SpatRaster per map |
+| simPde | list | Raw pde calculation from sim layers, by year, then one SpatRaster per map, as `pde` |
 | simPdeMap | list | Forcast (simulated) binned map of pde UD for intensity of selection by year |
 
 <span id="tab:moduleOutputs-caribou-SSUD"></span>Table 3: List of
