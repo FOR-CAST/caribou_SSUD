@@ -22,10 +22,6 @@ always_allow_html: true
 knitr::opts_chunk$set(echo = TRUE, eval = FALSE, results = "hold") ## change to eval = TRUE if all chunks are to be evaluated
 ```
 
-[![made-with-Markdown](https://img.shields.io/badge/Made%20with-Markdown-1f425f.png)](https://commonmark.org)
-
-<!-- if knitting to pdf remember to add the pandoc_args: ["--extract-media", "."] option to yml in order to get the badge images -->
-
 #### Authors:
 
 `r paste(as.character(SpaDES.core::moduleMetadata(module = "caribou_SSUD", path = '..')$authors), sep = ', ')`
@@ -35,16 +31,29 @@ knitr::opts_chunk$set(echo = TRUE, eval = FALSE, results = "hold") ## change to 
 
 ### Module summary
 
-Provide a brief summary of what the module does / how to use the module.
+<!-- TODO(JWT): cite the steady-state utilization distribution method (named in the module's description) once it is in citations/. -->
 
-Module documentation should be written so that others can use your module.
-This is a template for module documentation, and should be changed to reflect your module.
+caribou_SSUD maps caribou habitat use from an integrated step-selection analysis (iSSA).
+It turns the model's fixed-effect coefficients into a steady-state utilization distribution: the long-run density of use the model's habitat and movement terms imply over a landscape.
+The result is a probability density of use (PDE) for each model, normalized to sum to 1 over the area it is predicted for, and a binned map of it (`pdeMap`) that compares the cells within that area.
+
+It handles two caribou ecotypes (`ecotype`): northern mountain caribou, whose coefficients are read from the fixed-effect table of a fitted model, and boreal caribou, whose `glmmTMB` models are supplied one per jurisdiction.
+With `simulationScale` it maps the global model, one model per region, or both.
+
+In static mode (`simulationProcess = "static"`, the default) it maps the baseline landscape only.
+In dynamic mode it also rebuilds the landscape layers that change during a simulation -- the forest, from the simulated tree cohorts, and the time since fire -- every `predictionInterval` years from `predictStartYear`, and maps habitat use on each.
 
 ### Module inputs and parameters
 
-Describe input data required by the module and how to obtain it (e.g., directly from online sources or supplied by other modules)
-If `sourceURL` is specified, `downloadData("caribou_SSUD", "..")` may be sufficient.
-Table \@ref(tab:moduleInputs-caribou-SSUD) shows the full list of module inputs.
+The module needs the model and the landscape the model reads (Table \@ref(tab:moduleInputs-caribou-SSUD)):
+
+- `iSSAcoefficients`, the northern mountain model's fixed-effect coefficients; if not supplied, they are read from `<coefficientsModel>_fixed.csv` in the model's zip file in the Google Drive folder `modelsFolderID`.
+  Boreal models are supplied as `iSSAmodels`.
+- `modelLand`, the landscape layers, named as in the model's terms; a layer the model needs and the list lacks stops the run, naming it.
+- `studyAreaCaribou`, the area the global model was fit on, and, for the regional models, `studyArea_juris`, one area per region.
+- Optionally, a baseline made earlier (`pde` and `pdeMap`, or a folder, zip file or URL in `baselineSource`), so the baseline is read rather than made again.
+
+In dynamic mode it also needs the simulated forest (`cohortData` and `pixelGroupMap`), the time since fire (`timeSinceFire`) and the simulation's grid (`rasterToMatch`), which every `modelLand` layer must match.
 
 ```{r moduleInputs-caribou-SSUD, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE}
 df_inputs <- SpaDES.core::moduleInputs("caribou_SSUD", "..")
@@ -52,7 +61,8 @@ knitr::kable(df_inputs,
              caption = "List of (ref:caribou-SSUD) input objects and their description.")
 ```
 
-Provide a summary of user-visible parameters (Table \@ref(tab:moduleParams-caribou-SSUD))
+The parameters (Table \@ref(tab:moduleParams-caribou-SSUD)) choose the ecotype, the models and the area each is mapped over (`ecotype`, `simulationScale`, `pdeArea`), static or dynamic mode and the prediction years (`simulationProcess`, `predictStartYear`, `predictionInterval`, `predictLastYear`), and where the model and a premade baseline come from (`coefficientsModel`, `modelsFolderID`, `baselineSource`).
+`ts_else` is the time since disturbance given to cells with no recorded fire; use the value the model was fit with.
 
 
 ```{r moduleParams-caribou-SSUD, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE}
@@ -62,15 +72,19 @@ knitr::kable(df_params, caption = "List of (ref:caribou-SSUD) parameters and the
 
 ### Events
 
-Describe what happens for each event type.
+- `init`: makes the baseline PDE and map for the current landscape, or reads a premade one, and saves a baseline it made to the output folder.
+  In dynamic mode it also schedules the two events below, from `predictStartYear` every `predictionInterval` years, and in the last year when `predictLastYear` is `TRUE`.
+- `simLayers` (dynamic mode): rebuilds the layers that change -- the proportion of forest, from the simulated cohorts classified into forest types, and the time since fire, where cells that never burned get `ts_else` -- on top of the layers that do not (`fixedSSUD`), and writes the stack.
+- `calcSimPde` (dynamic mode): maps habitat use on the rebuilt layers with the same models as the baseline, into `simPde` and `simPdeMap`, and writes them.
 
 ### Plotting
 
-Write what is plotted.
+The module does not plot.
 
 ### Saving
 
-Write what is saved.
+A baseline the module makes is written to `pde_<.studyAreaName>/` in the output folder, as `pde_<model>.tif` and, when `normalizePDE` is `TRUE`, `pdeMap_<model>.tif`; each file is registered as an output.
+In dynamic mode, each prediction year's layers and maps go to its `sims/` subfolder.
 
 ### Module outputs
 
@@ -83,8 +97,9 @@ knitr::kable(df_outputs, caption = "List of (ref:caribou-SSUD) outputs and their
 
 ### Links to other modules
 
-Describe any anticipated linkages to other modules, such as modules that supply input data or do post-hoc analysis.
+In dynamic mode, the simulated forest comes from the LandR Biomass modules (`Biomass_core`: `cohortData` and `pixelGroupMap`) and the time since fire from the fire model (e.g. `scfm`).
+The coefficients and the landscape layers come from the iSSA fit, made outside SpaDES (e.g. with `hsaCEtool`).
 
 ### Getting help
 
--   provide a way for people to obtain help (e.g., module repository issues page)
+-   <https://github.com/JWTurn/caribou_SSUD/issues>
