@@ -461,11 +461,17 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
 
     message("Loading modelLand from cloud")
 
-    modelLandFile <- prepInputs(
-      targetFile = "modelLand.tif",
-      destinationPath = dPath,
-      fun = terra::rast,
-      url = P(sim)$outputFolderID
+    modelLandFile <- tryCatch(
+      prepInputs(
+        targetFile = "modelLand.tif",
+        destinationPath = dPath,
+        fun = terra::rast,
+        url = P(sim)$outputFolderID
+      ),
+      error = function(e) stop(
+        "Could not download modelLand.tif from outputFolderID (", P(sim)$outputFolderID, "): ",
+        conditionMessage(e), "\nSupply modelLand, or set outputFolderID to a Google Drive folder that",
+        " holds modelLand.tif.", call. = FALSE)
     )
 
     # as.list() drops the layer names, which make_pde() needs
@@ -480,11 +486,17 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
 
     message("Loading iSSA models from cloud")
 
-    modelFile <- prepInputs(
-      targetFile = "iSSAmodels.RData",
-      destinationPath = dPath,
-      url = P(sim)$outputFolderID,
-      fun = load(targetFile)
+    modelFile <- tryCatch(
+      prepInputs(
+        targetFile = "iSSAmodels.RData",
+        destinationPath = dPath,
+        url = P(sim)$outputFolderID,
+        fun = load(targetFile)
+      ),
+      error = function(e) stop(
+        "Could not download iSSAmodels.RData from outputFolderID (", P(sim)$outputFolderID, "): ",
+        conditionMessage(e), "\nSupply iSSAmodels, or set outputFolderID to a Google Drive folder that",
+        " holds iSSAmodels.RData.", call. = FALSE)
     )
 
     load(modelFile)
@@ -524,11 +536,18 @@ doEvent.caribou_SSUD = function(sim, eventTime, eventType) {
 
   # load jurisdictional study areas, needed only for regional models
   if (any(modelNames != "global") && !suppliedElsewhere("studyArea_juris", sim)) {
-    studyareaJuris<- prepInputs(
-      targetFile = paste0("studyArea_juris_", P(sim)$.studyAreaName, ".rds"),
-      destinationPath = dPath,
-      url = P(sim)$outputFolderID,
-      fun = readStudyAreaJuris(targetFile)
+    jurisFile <- paste0("studyArea_juris_", P(sim)$.studyAreaName, ".rds")
+    studyareaJuris <- tryCatch(
+      prepInputs(
+        targetFile = jurisFile,
+        destinationPath = dPath,
+        url = P(sim)$outputFolderID,
+        fun = readStudyAreaJuris(targetFile)
+      ),
+      error = function(e) stop(
+        "Could not download ", jurisFile, " from outputFolderID (", P(sim)$outputFolderID, "): ",
+        conditionMessage(e), "\nSupply studyArea_juris (e.g. from caribouLocPrep), or set",
+        " outputFolderID to a Google Drive folder that holds it.", call. = FALSE)
     )
     sim$studyArea_juris <- studyareaJuris
 

@@ -257,6 +257,16 @@ test_that("a dynamic run measures distances to disturbanceList's features, and w
   expect_equal(unlist(land$dist_paved_240_adj[1, 1:2]), c(60, 255), ignore_attr = TRUE)
 })
 
+test_that("simInit() says what to supply when outputFolderID lacks modelLand.tif", {
+  skip_if_not_installed("SpaDES.core")
+  paths <- local_spades_sandbox()
+  local_prepInputs_mock(function(...) stop("File not found"))
+
+  objs <- nm_objects()
+  objs$modelLand <- NULL
+  expect_error(run_simInit(paths, objs), "Could not download modelLand.tif.*File not found.*Supply modelLand")
+})
+
 test_that("a dynamic run with a season model makes the season and full-year maps, for the baseline and forecasts", {
   skip_if_not_installed("SpaDES.core")
   paths <- local_spades_sandbox()
