@@ -128,7 +128,9 @@ forestLayer <- function(name, nowCells, startCells, modelLand, windowRadius = li
 # the forecast of time-since layers (years since fire or harvest) for `year`. The grid-cell event
 # year comes from modelLand's layer of the same covariate on the grid (`baseLayer`; the event year is
 # baselineYear minus its value), replaced by the year from `simTimeSince` (e.g. scfm's timeSinceFire:
-# years since an event in the simulation, NA = none) where that is more recent. A cell has no event
+# years since an event in the simulation, NA = none) where that is more recent and in baselineYear or
+# later. Earlier sim years are not events of the simulation: scfmSpread's timeSinceFire may start from
+# stand age (as in YT_caribou), which would read every stand as burned when it started. A cell has no event
 # where `baseLayer` is NA and either `noEventYear` is NA and the value is `tsElse` or more, or the
 # event year is `noEventYear` or earlier (a modelLand that stores "never" as years since a stand-in
 # year, e.g. 1900). Coarser layers take, of the grid cells' event years (cells with no event left
@@ -145,6 +147,7 @@ timeSinceLayers <- function(names, baseLayer, year, baselineYear, tsElse, simTim
 
   if (!is.null(simTimeSince)) {
     simYear <- year - simTimeSince
+    simYear <- terra::ifel(simYear < baselineYear, NA, simYear)
     eventYear <- terra::ifel(!is.na(simYear) & (is.na(eventYear) | simYear > eventYear),
                              simYear, eventYear)
   }

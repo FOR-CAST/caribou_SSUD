@@ -129,6 +129,21 @@ test_that("timeSinceLayers() takes the more recent of modelLand's and the simula
   expect_equal(unlist(aged[1:4]), c(15, 20, 200, 200), ignore_attr = TRUE)
 })
 
+test_that("timeSinceLayers() counts only fires the simulation burned (from baselineYear)", {
+  ## scfm's timeSinceFire started from stand age (YT_caribou#66): an unburned stand is not a fire
+  base <- fixture_grid(NA)            # ts_fire_240 in 2025: NA = never burned
+  base[1] <- 5                        # burned 2020
+  simTs <- fixture_grid(NA)           # scfm in 2030
+  simTs[1] <- 8                      # stand aged 2 in 2025, never burned since: reads 2022
+  simTs[2] <- 126                     # stand aged 120 in 2025: reads 1904
+  simTs[3] <- 3                       # burned 2027 in the simulation
+  simTs[4] <- 5                       # burned 2025, the first simulated year
+
+  out <- timeSinceLayers("ts_fire_240", base, 2030, 2025, 200, simTs)
+  ## modelLand's 2020 fire stays; the stand ages are not fires; the simulation's fires count
+  expect_equal(unlist(out$ts_fire_240[1:5]), c(10, 200, 3, 5, 200), ignore_attr = TRUE)
+})
+
 test_that("timeSinceLayers() reads a stand-in no-event year (noEventYear) as no event", {
   ## as the boreal NWT modelLand: baseline 2022, never burned = years since 1900 (122)
   base <- fixture_grid(122)
