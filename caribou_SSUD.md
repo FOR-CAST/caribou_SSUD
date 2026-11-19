@@ -1,6 +1,6 @@
 caribou_SSUD Manual
 ================
-Version 0.0.1.9000, last updated: 2026-11-18
+Version 0.0.1.9000, last updated: 2026-11-19
 
 - [caribou_SSUD Module](#caribou_ssud-module)
   - [Module Overview](#module-overview)
@@ -51,7 +51,7 @@ the full list of module inputs.
 | iSSAseasons | data.table | For a model with seasons and seasonWeights ‘length’: the model’s season table, one row per season, with columns `season` (as in the terms, e.g. `winter` for `seasonwinter`) and `days` (days per season), as hsaCEtool’s `<model>_seasons.csv` gives it. If not supplied, read from `<coefficientsModel>_seasons.csv` in the model’s zip, when it has one (models fit before hsaCEtool wrote this table do not). | NA |
 | cohortData | data.table | `data.table` with cohort-level information on age and biomass, by `pixelGroup` and ecolocation (i.e., `ecoregionGroup`). If supplied, it must have the following columns: `pixelGroup` (integer), `ecoregionGroup` (factor), `speciesCode` (factor), `B` (integer in $g/m^2$), `age` (integer in years) | NA |
 | pixelGroupMap | SpatRaster | A raster layer with `pixelGroup` IDs per pixel. Pixels are grouped based on identical `ecoregionGroup`, `speciesCode`, `age` and `B` composition, even if the user supplies other initial groupings (e.g., via the `Biomass_borealDataPrep` module. | NA |
-| timeSinceFire | SpatRaster | Dynamic mode: years since each cell last burned in the simulation, NA where it has not burned (as scfmSpread keeps it), on the forecast grid. Fire layers take a cell’s fire year from it where that is more recent than modelLand’s. If absent, fire layers only age. | NA |
+| timeSinceFire | SpatRaster | Dynamic mode: years since each cell last burned in the simulation, NA where it has not burned (as scfmSpread keeps it), on the forecast grid. Fire layers take a cell’s fire year from it where that is more recent than modelLand’s and in baselineYear or later, so values it started with (e.g. stand age) are not read as fires. If absent, fire layers only age. | NA |
 | disturbanceList | list | Dynamic mode: anthroDisturbance_Generator’s disturbances, a list by sector of lists by class, each holding all of that class’s features (existing and simulated) as a SpatVector (or sf). Distance layers are measured to the classes in disturbanceClasses. If absent, distance layers stay as in modelLand. | NA |
 | sppEquiv | data.table | Dynamic mode: LandR’s species-equivalence table, with a `Type` column (Conifer/Deciduous) and the species codes in column sppEquivCol. If absent, LandR::sppEquivalencies_CA. | NA |
 | forestBaseline | list | Dynamic mode, forestForecast ‘change’: LandR’s forest at the start of the simulation, a named list of 0/1 SpatRasters on the forecast grid, one per forest covariate (e.g. prop_forest). If not supplied, made in init from cohortData and pixelGroupMap. | NA |
