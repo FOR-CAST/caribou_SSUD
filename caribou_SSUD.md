@@ -1,6 +1,6 @@
 caribou_SSUD Manual
 ================
-Version 0.0.1.9000, last updated: 2026-11-19
+Version 0.0.1.9000, last updated: 2026-11-20
 
 - [caribou_SSUD Module](#caribou_ssud-module)
   - [Module Overview](#module-overview)
@@ -110,7 +110,12 @@ In dynamic mode it also uses, from the other modules of the simulation:
   starts from stand age is not read as fire history;
 - the human disturbance (`disturbanceList`);
 - the simulation’s grid (`rasterToMatch`), which every `modelLand` layer
-  must match.
+  must match. If the model has layers coarser than the grid’s cells, the
+  grid’s top-left corner must also be a multiple of each of those
+  resolutions. A template cropped to a study area should be snapped
+  outward to the coarsest template resolution, not just the model’s
+  (e.g. 4800 m on the NMC templates, though the current NMC models go up
+  to 1200 m), so later models with coarser layers fit too.
 
 A forecaster that is missing leaves its layers as they are: fire and
 harvest layers only age, and distances stay as in `modelLand`.
@@ -129,7 +134,7 @@ harvest layers only age, and distances stay as in `modelLand`.
 | modelLand | list | The landscape layers the models read: a named list of SpatRasters on one grid (or one multi-layer SpatRaster, made into that list), each named as in the model’s terms without `_end` (e.g. `prop_forest_240` for the term `prop_forest_240_end`). The layers needed are read from the terms, and a missing one stops the run, naming it. Capped distances carry `_adj` (e.g. `dist_paved_240_adj`). If not supplied, `modelLand.tif` is downloaded from outputFolderID. | NA |
 | studyAreaCaribou | SpatVector | The area of the global model: a polygon of the full extent of the caribou locations it was fit on. If not supplied, studyArea is used. | NA |
 | studyAreaReporting | SpatVector | Optional: the area the results are reported for (e.g. a range buffer clipped to a jurisdiction), a SpatVector or sf polygon. Used only when pdeArea is ‘fullReportingArea’ or ‘regionalReportingArea’. | NA |
-| rasterToMatch | SpatRaster | Dynamic mode: the simulation’s grid, e.g. the one LandR and scfm use. The forecast layers are built on it, and every modelLand layer must be on it (same extent, rows and columns, cell size and coordinate system), or the run stops. If not supplied, modelLand’s grid is used. | NA |
+| rasterToMatch | SpatRaster | Dynamic mode: the simulation’s grid, e.g. the one LandR and scfm use. The forecast layers are built on it. Every modelLand layer must be on it (same extent, rows and columns, cell size and coordinate system), or the run stops. If the model has layers coarser than the grid’s cells (e.g. ts_fire_1200 on a 240 m grid), the grid’s top-left corner (xmin, ymax) must also be a multiple of each of those resolutions, so the coarse blocks line up with modelLand’s. When cropping a template to a study area, snap the crop outward to the coarsest template resolution, not just the model’s, if the resolutions nest (e.g. 4800 m for the northern mountain templates), so later models with coarser layers fit too. If not supplied, modelLand’s grid is used. | NA |
 | studyArea_juris | list | Named list of SpatVectors, one area per region (e.g. jurisdiction), for the regional models. Not needed when simulationScale is ‘global’. | NA |
 | pde | list | Baseline PDE (raw utility if normalizePDE is FALSE): a named list with one SpatRaster per model (‘global’ and/or a region), or for a model with seasons, per season map and the full-year map (see seasonMaps, fullYear). If not supplied, read from baselineSource, else made from modelLand. | NA |
 | pdeMap | list | Baseline binned PDE maps, named as `pde`; NULL if normalizePDE is FALSE. | NA |
