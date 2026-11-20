@@ -71,7 +71,11 @@ In dynamic mode it also uses, from the other modules of the simulation:
 - the simulated forest (`cohortData` and `pixelGroupMap`, with `sppEquiv` to tell conifers from broadleaf species);
 - the time since fire (`timeSinceFire`): only fires burned in the simulation (from `baselineYear` on) are read from it, so a map that starts from stand age is not read as fire history;
 - the human disturbance (`disturbanceList`);
-- the simulation's grid (`rasterToMatch`), which every `modelLand` layer must match.
+- the simulation's grid (`rasterToMatch`), which every `modelLand` layer must match. If the model
+  has layers coarser than the grid's cells, the grid's top-left corner must also be a multiple of
+  each of those resolutions. A template cropped to a study area should be snapped outward to the
+  coarsest template resolution, not just the model's (e.g. 4800 m on the NMC templates, though the
+  current NMC models go up to 1200 m), so later models with coarser layers fit too.
 
 A forecaster that is missing leaves its layers as they are: fire and harvest layers only age, and distances stay as in `modelLand`.
 
